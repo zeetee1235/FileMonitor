@@ -750,7 +750,7 @@ def build():
         ) as progress:
             task = progress.add_task("Compiling...", total=None)
             
-            result = subprocess.run(['gcc', '-o', 'monitor', 'main.c', '-ljson-c', '-lpthread'], 
+            result = subprocess.run(['gcc', '-o', 'monitor', 'src/main.c', '-ljson-c', '-lpthread'], 
                                   capture_output=True, text=True)
             
             progress.remove_task(task)

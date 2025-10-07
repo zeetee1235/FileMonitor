@@ -276,7 +276,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <p align="center">
   <img src="docs/osage_chan_plush.jpg" alt="Osage-chan says: Great job reading the documentation!" width="200">
   <br>
-  <em>Listen to inabakumori's songs while coding</em>
+  <em>hi!</em>
   <br>
 </p>
 </details>
