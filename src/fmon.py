@@ -102,7 +102,7 @@ class ConfigManager:
                         elif key == "extension":
                             config["extensions"].append(value)
         except Exception as e:
-            console.print(f"[red]Failed to load configuration file: {e}[/red]")
+            console.print(f"Failed to load configuration file: {e}")
             
         return config
     
@@ -110,20 +110,20 @@ class ConfigManager:
         """설정 파일 저장"""
         try:
             with open(self.config_path, 'w', encoding='utf-8') as f:
-                f.write("# 파일 모니터 설정 파일\n")
-                f.write("# 주석은 '#'으로 시작합니다\n\n")
+                f.write("# File Monitor Configuration\n")
+                f.write("# Comments start with '#'\n\n")
                 
-                f.write(f"# 재귀적 디렉토리 모니터링\n")
+                f.write(f"# Recursive directory monitoring\n")
                 f.write(f"recursive={'true' if config['recursive'] else 'false'}\n\n")
                 
                 if config.get('extensions'):
-                    f.write("# 모니터링할 파일 확장자\n")
+                    f.write("# File extensions to monitor\n")
                     for ext in config['extensions']:
                         f.write(f"extension={ext}\n")
                         
-            console.print("[green]✓[/green] Configuration saved.")
+            console.print("SUCCESS: Configuration saved")
         except Exception as e:
-            console.print(f"[red]✗ Failed to save configuration: {e}[/red]")
+            console.print(f"ERROR: Failed to save configuration: {e}")
 
 class LogAnalyzer:
     """로그 분석 클래스"""
@@ -178,7 +178,7 @@ class LogAnalyzer:
                             pass
                             
         except Exception as e:
-            console.print(f"[red]Log analysis failed: {e}[/red]")
+            console.print(f"Log analysis failed: {e}")
             
         return stats
     
@@ -197,7 +197,7 @@ class LogAnalyzer:
                         if len(results) >= limit:
                             break
         except Exception as e:
-            console.print(f"[red]Log search failed: {e}[/red]")
+            console.print(f"Log search failed: {e}")
             
         return results
 
@@ -221,17 +221,17 @@ def format_file_size(size_bytes: int) -> str:
 def cli(ctx, interactive):
     """File Monitor CLI Tool v2.0.0
     
-    A modern file system monitoring tool using Rich for beautiful terminal interface.
+    Simple file system monitoring tool.
     """
     if interactive:
         # 인터랙티브 모드 실행
         try:
             import subprocess
-            subprocess.run([sys.executable, 'src/interactive_menu.py'], cwd='..')
+            subprocess.run([sys.executable, 'src/interactive_menu.py'])
         except FileNotFoundError:
-            console.print("[red]src/interactive_menu.py not found. Please ensure it's in the src directory.[/red]")
+            console.print("ERROR: src/interactive_menu.py not found")
         except KeyboardInterrupt:
-            console.print("\n[yellow]👋 Goodbye![/yellow]")
+            console.print("\nExiting...")
         ctx.exit()
     elif ctx.invoked_subcommand is None:
         # 명령어 없이 실행되면 help 표시
@@ -241,12 +241,13 @@ def cli(ctx, interactive):
 @click.argument('path', default='.')
 @click.option('--background', '-b', is_flag=True, help='Run in background')
 @click.option('--config', '-c', default=CONFIG_FILE, help='Configuration file path')
-def start(path: str, background: bool, config: str):
+@click.option('--advanced', '-a', is_flag=True, help='Use advanced monitoring features')
+def start(path: str, background: bool, config: str, advanced: bool):
     """Start file monitoring"""
     
     # 경로 검증
     if not os.path.exists(path):
-        console.print(f"[red]✗ Path not found: {path}[/red]")
+        console.print(f"ERROR: Path not found: {path}")
         sys.exit(1)
     
     # 절대 경로로 변환
@@ -255,7 +256,7 @@ def start(path: str, background: bool, config: str):
     # 이미 실행 중인지 확인
     ipc = MonitorIPC()
     if ipc.is_monitor_running():
-        console.print("[yellow]⚠ Monitor is already running.[/yellow]")
+        console.print("WARNING: Monitor is already running")
         if not Confirm.ask("Stop existing monitor and start new one?"):
             return
         else:
@@ -266,31 +267,43 @@ def start(path: str, background: bool, config: str):
     config_manager = ConfigManager(config)
     monitor_config = config_manager.load_config()
     
-    # 패널로 시작 정보 표시
-    panel_content = f"""[bold cyan]File Monitoring Started[/bold cyan]
-
-[bold]Watch Directory:[/bold] {abs_path}
-[bold]Recursive Mode:[/bold] {'Yes' if monitor_config['recursive'] else 'No'}
-[bold]Execution Mode:[/bold] {'Background' if background else 'Foreground'}
-[bold]Config File:[/bold] {config}
-"""
+    # 실행할 프로그램 선택
+    monitor_executable = './build/advanced_monitor' if advanced else './build/main'
+    monitor_name = 'Advanced Monitor' if advanced else 'Standard Monitor'
+    
+    # 실행 파일 존재 확인
+    if not os.path.exists(monitor_executable):
+        console.print(f"ERROR: {monitor_executable} not found")
+        console.print("Build first: make all")
+        sys.exit(1)
+    
+    # 시작 정보 표시
+    console.print(f"Starting {monitor_name}")
+    console.print(f"Directory: {abs_path}")
+    console.print(f"Recursive: {'Yes' if monitor_config['recursive'] else 'No'}")
+    console.print(f"Mode: {'Background' if background else 'Foreground'}")
+    
+    if advanced:
+        console.print("Features: Checksum, Log Rotation, Performance Stats")
     
     if monitor_config['extensions']:
         ext_text = ", ".join(monitor_config['extensions'][:10])
         if len(monitor_config['extensions']) > 10:
             ext_text += f" and {len(monitor_config['extensions']) - 10} more"
-        panel_content += f"[bold]Filter Extensions:[/bold] {ext_text}\n"
+        console.print(f"Extensions: {ext_text}")
     else:
-        panel_content += "[bold]Filter:[/bold] All files\n"
-    
-    console.print(Panel(panel_content, title="🚀 Monitor Start", border_style="green"))
+        console.print("Filter: All files")
     
     # C 프로그램 실행
     try:
         if background:
             # 백그라운드에서 실행
+            cmd = [monitor_executable, abs_path]
+            if advanced and os.path.exists(config):
+                cmd.extend(['--config', config])
+                
             process = subprocess.Popen(
-                ['./monitor', abs_path],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
@@ -299,29 +312,34 @@ def start(path: str, background: bool, config: str):
             with open(PID_FILE, 'w') as f:
                 f.write(str(process.pid))
             
-            console.print(f"[green]✓ Monitor started in background. (PID: {process.pid})[/green]")
-            console.print(f"[dim]Check logs: [bold]fmon logs --tail[/bold][/dim]")
-            console.print(f"[dim]Check status: [bold]fmon status[/bold][/dim]")
-            console.print(f"[dim]Stop monitor: [bold]fmon stop[/bold][/dim]")
+            console.print(f"SUCCESS: {monitor_name} started in background (PID: {process.pid})")
+            console.print("Commands:")
+            console.print("  fmon logs --tail    # View logs")
+            console.print("  fmon status         # Check status")
+            console.print("  fmon stop           # Stop monitor")
         else:
             # 포그라운드에서 실행
-            console.print("[dim]Press Ctrl+C to stop monitoring.[/dim]\n")
+            console.print("Press Ctrl+C to stop monitoring")
             
-            process = subprocess.Popen(['./monitor', abs_path])
+            cmd = [monitor_executable, abs_path]
+            if advanced and os.path.exists(config):
+                cmd.extend(['--config', config])
+                
+            process = subprocess.Popen(cmd)
             
             try:
                 process.wait()
             except KeyboardInterrupt:
-                console.print("\n[yellow]⚠ Interrupted by user.[/yellow]")
+                console.print("\nInterrupted by user")
                 process.terminate()
                 process.wait()
                 
     except FileNotFoundError:
-        console.print("[red]✗ monitor executable not found.[/red]")
-        console.print("[dim]Build first: [bold]fmon build[/bold][/dim]")
+        console.print(f"ERROR: {monitor_executable} not found")
+        console.print("Build first: make all")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]✗ Failed to start monitor: {e}[/red]")
+        console.print(f"ERROR: Failed to start monitor: {e}")
         sys.exit(1)
 
 def stop_monitor():
@@ -337,25 +355,25 @@ def stop_monitor():
             # PID 파일 삭제
             os.remove(PID_FILE)
             
-            console.print("[green]✓ Monitor stopped.[/green]")
+            console.print("SUCCESS: Monitor stopped")
             return True
             
         except (FileNotFoundError, ProcessLookupError):
-            console.print("[yellow]⚠ PID file exists but process is not running.[/yellow]")
+            console.print("WARNING: PID file exists but process is not running")
             if os.path.exists(PID_FILE):
                 os.remove(PID_FILE)
             return False
         except Exception as e:
-            console.print(f"[red]✗ Failed to stop monitor: {e}[/red]")
+            console.print(f"ERROR: Failed to stop monitor: {e}")
             return False
     else:
-        console.print("[yellow]⚠ No running monitor found.[/yellow]")
+        console.print("WARNING: No running monitor found")
         return False
 
 @cli.command()
 def stop():
     """Stop file monitoring"""
-    console.print("[bold]Stopping monitor...[/bold]")
+    console.print("Stopping monitor...")
     stop_monitor()
 
 @cli.command()
@@ -363,7 +381,7 @@ def status():
     """Check monitor status"""
     
     # 테이블 생성
-    table = Table(title="📊 File Monitor Status", box=box.ROUNDED)
+    table = Table(title="File Monitor Status", box=box.SIMPLE)
     table.add_column("Item", style="cyan", no_wrap=True)
     table.add_column("Value", style="white")
     
@@ -376,7 +394,7 @@ def status():
             # 프로세스 존재 확인
             try:
                 os.kill(pid, 0)
-                table.add_row("Status", "[green]🟢 Running[/green]")
+                table.add_row("Status", "Running")
                 table.add_row("PID", str(pid))
                 
                 # 프로세스 정보
@@ -390,13 +408,13 @@ def status():
                     pass
                     
             except ProcessLookupError:
-                table.add_row("Status", "[red]🔴 Stopped (PID file exists but no process)[/red]")
+                table.add_row("Status", "Stopped (PID file exists but no process)")
                 os.remove(PID_FILE)
                 
         except Exception as e:
-            table.add_row("Status", f"[red]🔴 Error: {e}[/red]")
+            table.add_row("Status", f"Error: {e}")
     else:
-        table.add_row("Status", "[red]🔴 Stopped[/red]")
+        table.add_row("Status", "Stopped")
     
     # 로그 파일 정보
     if os.path.exists(LOG_FILE):
@@ -413,7 +431,7 @@ def status():
         except:
             pass
     else:
-        table.add_row("Log File", "[dim]None[/dim]")
+        table.add_row("Log File", "None")
     
     # 설정 파일 정보
     if os.path.exists(CONFIG_FILE):
@@ -429,7 +447,7 @@ def status():
         else:
             table.add_row("Filter", "All files")
     else:
-        table.add_row("Config File", "[dim]None[/dim]")
+        table.add_row("Config File", "None")
     
     console.print(table)
 
@@ -444,7 +462,7 @@ def show(lines: int):
     """View recent logs"""
     
     if not os.path.exists(LOG_FILE):
-        console.print("[yellow]⚠ Log file not found.[/yellow]")
+        console.print("WARNING: Log file not found")
         return
     
     try:
@@ -453,46 +471,28 @@ def show(lines: int):
         
         recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
         
-        console.print(Panel(
-            f"Recent {len(recent_lines)} lines",
-            title="📄 Log File",
-            border_style="blue"
-        ))
+        console.print(f"Recent {len(recent_lines)} lines from log:")
+        console.print("=" * 50)
         
         for line in recent_lines:
             line = line.strip()
             if line:
-                # 색상 적용
-                if "Created:" in line:
-                    console.print(f"[green]{line}[/green]")
-                elif "Deleted:" in line:
-                    console.print(f"[red]{line}[/red]")
-                elif "Modified:" in line:
-                    console.print(f"[yellow]{line}[/yellow]")
-                elif "Moved" in line:
-                    console.print(f"[blue]{line}[/blue]")
-                elif "Error" in line or "Failed" in line:
-                    console.print(f"[red]{line}[/red]")
-                else:
-                    console.print(line)
+                console.print(line)
                     
     except Exception as e:
-        console.print(f"[red]✗ Failed to read log: {e}[/red]")
+        console.print(f"ERROR: Failed to read log: {e}")
 
 @logs.command()
 def tail():
     """Real-time log viewing"""
     
     if not os.path.exists(LOG_FILE):
-        console.print("[yellow]⚠ Log file not found.[/yellow]")
-        console.print("[dim]Start monitor first: [bold]fmon start[/bold][/dim]")
+        console.print("WARNING: Log file not found")
+        console.print("Start monitor first: fmon start")
         return
     
-    console.print(Panel(
-        "Real-time log monitoring (Press Ctrl+C to exit)",
-        title="📺 Live Log",
-        border_style="cyan"
-    ))
+    console.print("Real-time log monitoring (Press Ctrl+C to exit)")
+    console.print("=" * 50)
     
     try:
         # tail -f implementation
@@ -504,24 +504,14 @@ def tail():
                 line = f.readline()
                 if line:
                     line = line.strip()
-                    # 색상 적용
-                    if "Created:" in line:
-                        console.print(f"[green]{line}[/green]")
-                    elif "Deleted:" in line:
-                        console.print(f"[red]{line}[/red]")
-                    elif "Modified:" in line:
-                        console.print(f"[yellow]{line}[/yellow]")
-                    elif "Moved" in line:
-                        console.print(f"[blue]{line}[/blue]")
-                    else:
-                        console.print(line)
+                    console.print(line)
                 else:
                     time.sleep(0.1)
                     
     except KeyboardInterrupt:
-        console.print("\n[yellow]⚠ Real-time log monitoring stopped.[/yellow]")
+        console.print("\nReal-time log monitoring stopped")
     except Exception as e:
-        console.print(f"[red]✗ Log monitoring failed: {e}[/red]")
+        console.print(f"ERROR: Log monitoring failed: {e}")
 
 @logs.command()
 def stats():
@@ -531,11 +521,11 @@ def stats():
     stats = analyzer.get_stats()
     
     if stats["total_events"] == 0:
-        console.print("[yellow]⚠ No log data available.[/yellow]")
+        console.print("WARNING: No log data available")
         return
     
     # Statistics table
-    table = Table(title="📈 Log Statistics", box=box.ROUNDED)
+    table = Table(title="Log Statistics", box=box.SIMPLE)
     table.add_column("Event Type", style="cyan")
     table.add_column("Count", style="white", justify="right")
     table.add_column("Percentage", style="green", justify="right")
@@ -559,30 +549,11 @@ def stats():
     
     console.print(table)
     
-    # Daily statistics (last 7 days)
-    if stats["daily_stats"]:
-        daily_table = Table(title="📅 Daily Statistics (Last 7 Days)", box=box.ROUNDED)
-        daily_table.add_column("Date", style="cyan")
-        daily_table.add_column("Event Count", style="white", justify="right")
-        
-        # Show only last 7 days data
-        sorted_days = sorted(stats["daily_stats"].items(), reverse=True)[:7]
-        for date, count in sorted_days:
-            daily_table.add_row(date, f"{count:,}")
-        
-        console.print(daily_table)
-    
     # File information
-    info_table = Table(title="📁 File Information", box=box.ROUNDED)
-    info_table.add_column("Item", style="cyan")
-    info_table.add_column("Value", style="white")
-    
-    info_table.add_row("Total Events", f"{stats['total_events']:,}")
-    info_table.add_row("File Size", format_file_size(stats["file_size"]))
+    console.print(f"\nTotal Events: {stats['total_events']:,}")
+    console.print(f"File Size: {format_file_size(stats['file_size'])}")
     if stats["last_modified"]:
-        info_table.add_row("Last Modified", stats["last_modified"].strftime("%Y-%m-%d %H:%M:%S"))
-    
-    console.print(info_table)
+        console.print(f"Last Modified: {stats['last_modified'].strftime('%Y-%m-%d %H:%M:%S')}")
 
 @logs.command()
 @click.argument('query')
@@ -594,26 +565,21 @@ def search(query: str, limit: int):
     results = analyzer.search_logs(query, limit)
     
     if not results:
-        console.print(f"[yellow]⚠ No search results for '{query}'.[/yellow]")
+        console.print(f"WARNING: No search results for '{query}'")
         return
     
-    console.print(Panel(
-        f"Search results for '{query}': {len(results)} found",
-        title="🔍 Log Search",
-        border_style="green"
-    ))
+    console.print(f"Search results for '{query}': {len(results)} found")
+    console.print("=" * 50)
     
     for i, line in enumerate(results, 1):
-        # 검색어 하이라이트
-        highlighted = line.replace(query, f"[bold red]{query}[/bold red]")
-        console.print(f"{i:3d}: {highlighted}")
+        console.print(f"{i:3d}: {line}")
 
 @logs.command()
 def clean():
     """Clean log files"""
     
     if not os.path.exists(LOG_FILE):
-        console.print("[yellow]⚠ No log files to clean.[/yellow]")
+        console.print("WARNING: No log files to clean")
         return
     
     # 확인
@@ -633,11 +599,11 @@ def clean():
         with open(LOG_FILE, 'w') as f:
             pass
         
-        console.print(f"[green]✓ Logs cleaned.[/green]")
-        console.print(f"[dim]Backup file: {backup_name}[/dim]")
+        console.print("SUCCESS: Logs cleaned")
+        console.print(f"Backup file: {backup_name}")
         
     except Exception as e:
-        console.print(f"[red]✗ Failed to clean logs: {e}[/red]")
+        console.print(f"ERROR: Failed to clean logs: {e}")
 
 @cli.group()
 def config():
@@ -651,21 +617,17 @@ def show():
     config_manager = ConfigManager()
     current_config = config_manager.load_config()
     
-    # 설정을 Syntax로 표시
-    config_text = f"""# File Monitor Configuration
-
-recursive = {str(current_config['recursive']).lower()}
-"""
+    # 설정을 간단한 텍스트로 표시
+    console.print("Current Configuration:")
+    console.print("=" * 30)
+    console.print(f"Recursive: {str(current_config['recursive']).lower()}")
     
     if current_config['extensions']:
-        config_text += "\n# File extensions to monitor\n"
+        console.print("Extensions:")
         for ext in current_config['extensions']:
-            config_text += f"extension = {ext}\n"
+            console.print(f"  - {ext}")
     else:
-        config_text += "\n# Monitor all files (no extension filter)\n"
-    
-    syntax = Syntax(config_text, "ini", theme="monokai", line_numbers=True)
-    console.print(Panel(syntax, title="⚙️ Current Configuration", border_style="blue"))
+        console.print("Filter: All files (no extension filter)")
 
 @config.command()
 @click.option('--recursive/--no-recursive', default=True, help='Enable recursive directory monitoring')
@@ -681,12 +643,10 @@ def set(recursive: bool, extensions: tuple):
     }
     
     # 설정 미리보기
-    console.print(Panel(
-        f"Recursive Mode: {'Yes' if recursive else 'No'}\n"
-        f"Extension Filter: {', '.join(extensions) if extensions else 'None (All files)'}",
-        title="🔧 New Configuration",
-        border_style="yellow"
-    ))
+    console.print("New Configuration:")
+    console.print("=" * 20)
+    console.print(f"Recursive Mode: {'Yes' if recursive else 'No'}")
+    console.print(f"Extension Filter: {', '.join(extensions) if extensions else 'None (All files)'}")
     
     if Confirm.ask("Do you want to save this configuration?"):
         config_manager.save_config(new_config)
@@ -737,10 +697,11 @@ def preset(preset: str):
         })
 
 @cli.command()
-def build():
+@click.option('--target', '-t', type=click.Choice(['main', 'advanced', 'all']), default='all', help='Build target')
+def build(target: str):
     """Build C program"""
     
-    console.print(Panel("Building C program...", title="🔨 Build", border_style="blue"))
+    console.print(f"Building {target} target...")
     
     try:
         with Progress(
@@ -748,28 +709,101 @@ def build():
             TextColumn("[progress.description]{task.description}"),
             console=console
         ) as progress:
-            task = progress.add_task("Compiling...", total=None)
-            
-            result = subprocess.run(['gcc', '-o', 'monitor', 'src/main.c', '-ljson-c', '-lpthread'], 
-                                  capture_output=True, text=True)
+            if target == 'all':
+                task = progress.add_task("Building all targets...", total=None)
+                result = subprocess.run(['make', 'all'], capture_output=True, text=True)
+            elif target == 'main':
+                task = progress.add_task("Building main monitor...", total=None)
+                result = subprocess.run(['make', 'build/main'], capture_output=True, text=True)
+            elif target == 'advanced':
+                task = progress.add_task("Building advanced monitor...", total=None)
+                result = subprocess.run(['make', 'build/advanced_monitor'], capture_output=True, text=True)
             
             progress.remove_task(task)
         
         if result.returncode == 0:
-            console.print("[green]✓ Build successful![/green]")
-            console.print("[dim]Executable: monitor[/dim]")
+            console.print(f"SUCCESS: Build completed ({target})")
+            
+            # 빌드된 파일 목록 표시
+            if target == 'all':
+                console.print("Executables:")
+                console.print("  - build/main (Standard monitor)")
+                console.print("  - build/advanced_monitor (Advanced monitor)")
+            elif target == 'main':
+                console.print("Executable: build/main")
+            elif target == 'advanced':
+                console.print("Executable: build/advanced_monitor")
+                
         else:
-            console.print("[red]✗ Build failed.[/red]")
+            console.print(f"ERROR: Build failed ({target})")
             if result.stderr:
-                console.print(f"[red]Error: {result.stderr}[/red]")
+                console.print(f"Error: {result.stderr}")
+            if result.stdout:
+                console.print(f"Output: {result.stdout}")
                 
     except FileNotFoundError:
-        console.print("[red]✗ GCC is not installed.[/red]")
+        console.print("ERROR: Make is not installed")
+        console.print("Install build tools: sudo apt install build-essential")
     except Exception as e:
-        console.print(f"[red]✗ Build failed: {e}[/red]")
+        console.print(f"ERROR: Build failed: {e}")
 
 @cli.command()
-def dashboard():
+def perf():
+    """View performance statistics (advanced monitor only)"""
+    
+    stats_file = "performance_stats.json"
+    
+    if not os.path.exists(stats_file):
+        console.print("WARNING: Performance statistics not available")
+        console.print("Start advanced monitor first: fmon start --advanced")
+        return
+    
+    try:
+        with open(stats_file, 'r') as f:
+            stats = json.load(f)
+        
+        # Performance table
+        perf_table = Table(title="Performance Statistics", box=box.SIMPLE)
+        perf_table.add_column("Metric", style="cyan")
+        perf_table.add_column("Value", style="white")
+        perf_table.add_column("Unit", style="dim")
+        
+        # CPU and Memory stats
+        if 'cpu_usage' in stats:
+            perf_table.add_row("CPU Usage", f"{stats['cpu_usage']:.1f}", "%")
+        if 'memory_usage' in stats:
+            perf_table.add_row("Memory Usage", f"{stats['memory_usage']:.1f}", "MB")
+        if 'memory_peak' in stats:
+            perf_table.add_row("Peak Memory", f"{stats['memory_peak']:.1f}", "MB")
+        
+        # File operation stats
+        if 'files_processed' in stats:
+            perf_table.add_row("Files Processed", f"{stats['files_processed']:,}", "files")
+        if 'events_per_second' in stats:
+            perf_table.add_row("Events/Second", f"{stats['events_per_second']:.2f}", "ops/s")
+        if 'checksums_computed' in stats:
+            perf_table.add_row("Checksums Computed", f"{stats['checksums_computed']:,}", "files")
+        
+        # Timing stats
+        if 'avg_processing_time' in stats:
+            perf_table.add_row("Avg Processing Time", f"{stats['avg_processing_time']:.3f}", "ms")
+        if 'uptime' in stats:
+            hours = stats['uptime'] // 3600
+            minutes = (stats['uptime'] % 3600) // 60
+            seconds = stats['uptime'] % 60
+            perf_table.add_row("Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}", "h:m:s")
+        
+        console.print(perf_table)
+        
+        # Update time
+        if 'last_updated' in stats:
+            update_time = datetime.fromtimestamp(stats['last_updated']).strftime("%Y-%m-%d %H:%M:%S")
+            console.print(f"\nLast updated: {update_time}")
+        
+    except json.JSONDecodeError:
+        console.print("ERROR: Invalid performance statistics file")
+    except Exception as e:
+        console.print(f"ERROR: Failed to read performance statistics: {e}")
     """Real-time dashboard"""
     
     def create_dashboard():
@@ -805,7 +839,7 @@ def dashboard():
         # 헤더
         layout["header"].update(Panel(
             "[bold cyan]File Monitor Dashboard[/bold cyan] - Real-time Monitoring",
-            title="📊 Dashboard",
+            title="Dashboard",
             border_style="bright_blue"
         ))
         

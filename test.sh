@@ -506,7 +506,7 @@ print_final_results() {
         exit 0
     else
         echo ""
-        echo -e "${RED}❌ SOME TESTS FAILED ❌${NC}"
+        echo -e "${RED}[X] SOME TESTS FAILED [X]${NC}"
         echo -e "${RED}Please check the failed tests above.${NC}"
         exit 1
     fi

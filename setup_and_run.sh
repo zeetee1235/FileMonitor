@@ -17,13 +17,13 @@ NC='\033[0m' # No Color
 # 로고 출력
 print_logo() {
     echo -e "${CYAN}"
-    echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║                                                               ║"
-    echo "║          🔍 File Monitor Auto Setup & Launcher 🚀            ║"
-    echo "║                                                               ║"
-    echo "║         Complete setup and execution in one script!           ║"
-    echo "║                                                               ║"
-    echo "╚═══════════════════════════════════════════════════════════════╝"
+    echo "=============================================================="
+    echo "                                                              "
+    echo "          File Monitor Auto Setup & Launcher                 "
+    echo "                                                              "
+    echo "         Complete setup and execution in one script!         "
+    echo "                                                              "
+    echo "=============================================================="
     echo -e "${NC}"
 }
 
@@ -33,19 +33,19 @@ print_step() {
 }
 
 print_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
+    echo -e "${GREEN}[OK]${NC} $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[✗]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1"
 }
 
 print_info() {
-    echo -e "${PURPLE}[ℹ]${NC} $1"
+    echo -e "${PURPLE}[INFO]${NC} $1"
 }
 
 # 시스템 의존성 확인 및 설치
@@ -116,25 +116,103 @@ install_python_packages() {
 
 # C 프로그램 빌드
 build_c_program() {
-    print_step "Building C monitor program..."
+    print_step "Building C monitor programs..."
     
-    if [ -f "src/main.c" ]; then
-        # JSON-C 라이브러리와 함께 컴파일
-        if gcc -o monitor src/main.c -ljson-c -lpthread 2>/dev/null; then
-            print_success "C program build successful!"
+    # 고급 의존성 확인
+    print_info "Checking for advanced monitoring dependencies..."
+    
+    # 필요한 라이브러리들 확인
+    LIBS_TO_CHECK=("json-c" "openssl" "zlib" "pcre")
+    MISSING_LIBS=()
+    
+    for lib in "${LIBS_TO_CHECK[@]}"; do
+        case $lib in
+            "json-c")
+                if ! pkg-config --exists json-c 2>/dev/null; then
+                    MISSING_LIBS+=("libjson-c-dev")
+                fi
+                ;;
+            "openssl")
+                if ! pkg-config --exists openssl 2>/dev/null; then
+                    MISSING_LIBS+=("libssl-dev")
+                fi
+                ;;
+            "zlib")
+                if ! pkg-config --exists zlib 2>/dev/null; then
+                    MISSING_LIBS+=("zlib1g-dev")
+                fi
+                ;;
+            "pcre")
+                if ! pkg-config --exists libpcre 2>/dev/null; then
+                    MISSING_LIBS+=("libpcre3-dev")
+                fi
+                ;;
+        esac
+    done
+    
+    # 누락된 라이브러리 설치
+    if [ ${#MISSING_LIBS[@]} -gt 0 ]; then
+        print_warning "Missing libraries for advanced features: ${MISSING_LIBS[*]}"
+        print_info "Attempting to install missing libraries..."
+        
+        if command -v apt &> /dev/null; then
+            sudo apt update && sudo apt install -y "${MISSING_LIBS[@]}"
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y json-c-devel openssl-devel zlib-devel pcre-devel
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y json-c-devel openssl-devel zlib-devel pcre-devel
+        elif command -v pacman &> /dev/null; then
+            sudo pacman -S json-c openssl zlib pcre
         else
-            print_warning "JSON-C library not found. Attempting to build basic version..."
-            if gcc -o monitor src/main.c -lpthread; then
-                print_success "Basic C program build successful!"
+            print_warning "Unable to auto-install libraries. Only basic monitoring will be available."
+        fi
+    fi
+    
+    # Makefile이 있으면 사용, 없으면 직접 컴파일
+    if [ -f "Makefile" ]; then
+        print_info "Using Makefile for building..."
+        if make all 2>/dev/null; then
+            print_success "All monitor programs built successfully using Makefile!"
+        else
+            print_warning "Makefile build failed. Attempting manual build..."
+            build_manually
+        fi
+    else
+        print_info "No Makefile found. Building manually..."
+        build_manually
+    fi
+}
+
+# 수동 빌드 함수
+build_manually() {
+    # 기본 모니터 빌드
+    if [ -f "src/main.c" ]; then
+        print_info "Building basic monitor..."
+        if gcc -o build/main src/main.c -ljson-c -lpthread 2>/dev/null; then
+            print_success "Basic monitor build successful!"
+        else
+            print_warning "JSON-C library not found. Building without JSON support..."
+            if gcc -o build/main src/main.c -lpthread; then
+                print_success "Basic monitor built (without JSON support)!"
             else
-                print_error "Failed to build C program."
+                print_error "Failed to build basic monitor."
                 exit 1
             fi
         fi
-    else
-        print_error "src/main.c file not found."
-        exit 1
     fi
+    
+    # 고급 모니터 빌드 (라이브러리 사용 가능할 때만)
+    if [ -f "src/advanced_monitor.c" ]; then
+        print_info "Building advanced monitor..."
+        if gcc -Wall -Wextra -g -O2 -pthread -o build/advanced_monitor src/advanced_monitor.c -ljson-c -lssl -lcrypto -lz -lpcre 2>/dev/null; then
+            print_success "Advanced monitor build successful!"
+        else
+            print_warning "Advanced monitor dependencies not available. Only basic monitor will be available."
+        fi
+    fi
+    
+    # build 디렉토리 생성
+    mkdir -p build
 }
 
 # 설정 파일 생성
@@ -144,31 +222,52 @@ create_config_files() {
     # monitor.conf 파일이 없으면 기본 설정 생성
     if [ ! -f "monitor.conf" ]; then
         print_info "Creating default configuration file..."
-        if [ -f "examples/monitor.conf" ]; then
-            cp examples/monitor.conf .
+        if [ -f "examples/advanced_monitor.conf" ]; then
+            cp examples/advanced_monitor.conf monitor.conf
+            print_success "Advanced configuration file copied from examples/advanced_monitor.conf"
+        elif [ -f "examples/monitor.conf" ]; then
+            cp examples/monitor.conf monitor.conf
             print_success "Configuration file copied from examples/monitor.conf"
         else
             cat > monitor.conf << 'EOF'
-# File Monitor Configuration File
-# Comments start with '#'
+# Advanced File Monitor Configuration
 
-# Recursive directory monitoring
+# Basic settings
 recursive=true
+max_file_size_mb=100
 
-# File extensions to monitor (web development preset)
+# File extensions to monitor
+extension=txt
+extension=log
+extension=conf
+extension=py
+extension=c
+extension=h
+extension=js
 extension=html
 extension=css
-extension=js
-extension=ts
-extension=jsx
-extension=tsx
-extension=vue
-extension=scss
-extension=less
 extension=json
 extension=xml
+
+# Advanced features
+enable_checksum=true
+enable_compression=true
+
+# Regex patterns for advanced filtering
+# Exclude temporary files
+pattern_exclude=.*\.(tmp|swp|bak)$
+pattern_exclude=^\..*
+
+# Include only source code files
+pattern_include=.*\.(c|h|py|js|html|css)$
+
+# Alert patterns for critical files
+pattern_alert=.*\.conf$
+pattern_alert=.*passwd.*
+pattern_alert=.*\.key$
+pattern_alert=.*\.pem$
 EOF
-            print_success "Default configuration file (monitor.conf) created successfully!"
+            print_success "Advanced configuration file (monitor.conf) created successfully!"
         fi
     else
         print_success "Configuration file already exists."
@@ -223,49 +322,55 @@ create_test_directory() {
 check_system_status() {
     print_step "Checking system status..."
     
-    echo -e "${CYAN}┌─────────────────────────────────────────┐${NC}"
-    echo -e "${CYAN}│               System Status             │${NC}"
-    echo -e "${CYAN}├─────────────────────────────────────────┤${NC}"
+    echo -e "${CYAN}+------------------------------------------+${NC}"
+    echo -e "${CYAN}|               System Status             |${NC}"
+    echo -e "${CYAN}+------------------------------------------+${NC}"
     
     # 파일 존재 확인
-    if [ -f "monitor" ]; then
-        echo -e "${CYAN}│${NC} C Program:      ${GREEN}✓ Built${NC}                 │"
+    if [ -f "build/main" ]; then
+        echo -e "${CYAN}|${NC} Basic Monitor:  ${GREEN}Built${NC}                 |"
     else
-        echo -e "${CYAN}│${NC} C Program:      ${RED}✗ Missing${NC}              │"
+        echo -e "${CYAN}|${NC} Basic Monitor:  ${RED}Missing${NC}              |"
+    fi
+    
+    if [ -f "build/advanced_monitor" ]; then
+        echo -e "${CYAN}|${NC} Advanced Monitor: ${GREEN}Built${NC}               |"
+    else
+        echo -e "${CYAN}|${NC} Advanced Monitor: ${YELLOW}Not Built${NC}           |"
     fi
     
     if [ -f "src/fmon.py" ]; then
-        echo -e "${CYAN}│${NC} Python CLI:     ${GREEN}✓ Ready${NC}                │"
+        echo -e "${CYAN}|${NC} Python CLI:     ${GREEN}Ready${NC}                |"
     else
-        echo -e "${CYAN}│${NC} Python CLI:     ${RED}✗ Missing${NC}              │"
+        echo -e "${CYAN}|${NC} Python CLI:     ${RED}Missing${NC}              |"
     fi
     
     if [ -f "src/interactive_menu.py" ]; then
-        echo -e "${CYAN}│${NC} Interactive Menu: ${GREEN}✓ Ready${NC}              │"
+        echo -e "${CYAN}|${NC} Interactive Menu: ${GREEN}Ready${NC}              |"
     else
-        echo -e "${CYAN}│${NC} Interactive Menu: ${RED}✗ Missing${NC}            │"
+        echo -e "${CYAN}|${NC} Interactive Menu: ${RED}Missing${NC}            |"
     fi
     
     if [ -f "monitor.conf" ]; then
-        echo -e "${CYAN}│${NC} Config File:    ${GREEN}✓ Present${NC}              │"
+        echo -e "${CYAN}|${NC} Config File:    ${GREEN}Present${NC}              |"
     else
-        echo -e "${CYAN}│${NC} Config File:    ${RED}✗ Missing${NC}              │"
+        echo -e "${CYAN}|${NC} Config File:    ${RED}Missing${NC}              |"
     fi
     
     # 모니터 실행 상태 확인
     if [ -f "monitor.pid" ]; then
         PID=$(cat monitor.pid)
         if kill -0 $PID 2>/dev/null; then
-            echo -e "${CYAN}│${NC} Monitor Status: ${GREEN}🟢 Running (PID: $PID)${NC}     │"
+            echo -e "${CYAN}|${NC} Monitor Status: ${GREEN}Running (PID: $PID)${NC}     |"
         else
-            echo -e "${CYAN}│${NC} Monitor Status: ${RED}🔴 Stopped${NC}              │"
+            echo -e "${CYAN}|${NC} Monitor Status: ${RED}Stopped${NC}              |"
             rm -f monitor.pid
         fi
     else
-        echo -e "${CYAN}│${NC} Monitor Status: ${RED}🔴 Stopped${NC}              │"
+        echo -e "${CYAN}|${NC} Monitor Status: ${RED}Stopped${NC}              |"
     fi
     
-    echo -e "${CYAN}└─────────────────────────────────────────┘${NC}"
+    echo -e "${CYAN}+------------------------------------------+${NC}"
 }
 
 # 실행 옵션 메뉴
@@ -273,16 +378,18 @@ show_execution_menu() {
     echo ""
     print_step "Please select an execution option:"
     echo ""
-    echo -e "${GREEN}1)${NC} 🎮 Interactive Mode (Arrow keys + Enter)"
-    echo -e "${GREEN}2)${NC} 🚀 Start Background Monitoring"
-    echo -e "${GREEN}3)${NC} 📊 Check Current Status"
-    echo -e "${GREEN}4)${NC} 📄 View Recent Logs"
-    echo -e "${GREEN}5)${NC} 📺 Real-time Dashboard"
-    echo -e "${GREEN}6)${NC} ⚙️ View Configuration"
-    echo -e "${GREEN}7)${NC} 🧪 Create Test Files and Test Monitoring"
-    echo -e "${GREEN}8)${NC} ❌ Exit"
+    echo -e "${GREEN}1)${NC} Interactive Mode (Arrow keys + Enter)"
+    echo -e "${GREEN}2)${NC} Start Background Monitoring (Basic)"
+    echo -e "${GREEN}3)${NC} Start Advanced Monitoring (with performance stats)"
+    echo -e "${GREEN}4)${NC} Check Current Status"
+    echo -e "${GREEN}5)${NC} View Recent Logs"
+    echo -e "${GREEN}6)${NC} Real-time Dashboard"
+    echo -e "${GREEN}7)${NC} View Configuration"
+    echo -e "${GREEN}8)${NC} Performance Statistics (Advanced only)"
+    echo -e "${GREEN}9)${NC} Create Test Files and Test Monitoring"
+    echo -e "${GREEN}10)${NC} Exit"
     echo ""
-    echo -n "Choice (1-8): "
+    echo -n "Choice (1-10): "
     read choice
     
     case $choice in
@@ -291,38 +398,48 @@ show_execution_menu() {
             python3 src/interactive_menu.py
             ;;
         2)
-            print_info "Starting background monitoring..."
+            print_info "Starting basic background monitoring..."
             python3 src/fmon.py start . --background
             sleep 2
             python3 src/fmon.py status
             ;;
         3)
-            print_info "Checking current status..."
+            print_info "Starting advanced background monitoring..."
+            python3 src/fmon.py start . --background --advanced
+            sleep 2
             python3 src/fmon.py status
             ;;
         4)
+            print_info "Checking current status..."
+            python3 src/fmon.py status
+            ;;
+        5)
             print_info "Displaying recent logs..."
             python3 src/fmon.py logs show -n 10
             ;;
-        5)
+        6)
             print_info "Starting real-time dashboard... (Press Q to exit)"
             sleep 1
             python3 src/fmon.py dashboard
             ;;
-        6)
+        7)
             print_info "Displaying current configuration..."
             python3 src/fmon.py config show
             ;;
-        7)
+        8)
+            print_info "Displaying performance statistics..."
+            python3 src/fmon.py perf
+            ;;
+        9)
             print_info "Running test..."
             run_test_demo
             ;;
-        8)
+        10)
             print_info "Exiting script."
             exit 0
             ;;
         *)
-            print_error "Invalid choice. Please enter a number between 1-8."
+            print_error "Invalid choice. Please enter a number between 1-10."
             show_execution_menu
             ;;
     esac
@@ -362,7 +479,7 @@ run_test_demo() {
 main() {
     print_logo
     
-    echo -e "${YELLOW}🔧 Starting automatic setup...${NC}"
+    echo -e "${YELLOW}Starting automatic setup...${NC}"
     echo ""
     
     # 1단계: 의존성 확인 및 설치
@@ -384,7 +501,7 @@ main() {
     create_test_directory
     
     echo ""
-    print_success "🎉 All setup completed successfully!"
+    print_success "All setup completed successfully!"
     echo ""
     
     # 7단계: 상태 확인
@@ -402,7 +519,7 @@ main() {
         echo ""
     done
     
-    print_success "👋 Exiting File Monitor setup and launcher script!"
+    print_success "Exiting File Monitor setup and launcher script!"
 }
 
 # 스크립트 실행
