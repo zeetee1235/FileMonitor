@@ -74,6 +74,75 @@ class ConfigManager:
     
     def __init__(self, config_path: str = CONFIG_FILE):
         self.config_path = config_path
+
+def detect_project_root(start_path: str = '.') -> str:
+    """프로젝트 루트 디렉토리 자동 감지
+    
+    다음 파일들 중 하나를 찾으면 프로젝트 루트로 판단:
+    - .git/ (Git 저장소)
+    - package.json (Node.js)
+    - requirements.txt (Python)
+    - Cargo.toml (Rust)
+    - pom.xml (Maven)
+    - build.gradle (Gradle)
+    - Makefile
+    - README.md (상위에 다른 표시가 없을 때)
+    """
+    current_path = os.path.abspath(start_path)
+    project_indicators = [
+        '.git',
+        'package.json',
+        'requirements.txt', 
+        'Cargo.toml',
+        'pom.xml',
+        'build.gradle',
+        'Makefile',
+        'pyproject.toml',
+        'setup.py',
+        '.gitignore'
+    ]
+    
+    # 최대 10단계까지만 올라가기
+    for _ in range(10):
+        # 프로젝트 표시 파일들 확인
+        for indicator in project_indicators:
+            if os.path.exists(os.path.join(current_path, indicator)):
+                return current_path
+                
+        # 루트 디렉토리에 도달했으면 중단
+        parent_path = os.path.dirname(current_path)
+        if parent_path == current_path:  # 루트 디렉토리
+            break
+            
+        current_path = parent_path
+    
+    # 프로젝트 루트를 찾지 못한 경우 시작 경로 반환
+    return os.path.abspath(start_path)
+
+def get_target_directory(path: str, parent: bool, project_root: bool, levels: int) -> str:
+    """모니터링할 대상 디렉토리 결정"""
+    
+    if project_root:
+        # 프로젝트 루트 자동 감지
+        return detect_project_root(path)
+    elif parent:
+        # 상위 디렉토리로 이동
+        current_path = os.path.abspath(path)
+        for _ in range(levels):
+            parent_path = os.path.dirname(current_path)
+            if parent_path == current_path:  # 루트에 도달
+                break
+            current_path = parent_path
+        return current_path
+    else:
+        # 지정된 경로 사용
+        return os.path.abspath(path)
+
+class ConfigManager:
+    """설정 파일 관리 클래스"""
+    
+    def __init__(self, config_path: str = CONFIG_FILE):
+        self.config_path = config_path
         
     def load_config(self) -> dict:
         """설정 파일 로드"""
@@ -242,16 +311,42 @@ def cli(ctx, interactive):
 @click.option('--background', '-b', is_flag=True, help='Run in background')
 @click.option('--config', '-c', default=CONFIG_FILE, help='Configuration file path')
 @click.option('--advanced', '-a', is_flag=True, help='Use advanced monitoring features')
-def start(path: str, background: bool, config: str, advanced: bool):
-    """Start file monitoring"""
+@click.option('--enhanced', '-e', is_flag=True, help='Use enhanced monitoring (dynamic watch management)')
+@click.option('--parent', '-p', is_flag=True, help='Monitor parent directory')
+@click.option('--project-root', '-r', is_flag=True, help='Auto-detect and monitor project root')
+@click.option('--levels', '-l', type=int, default=1, help='Number of parent levels to go up (with --parent)')
+def start(path: str, background: bool, config: str, advanced: bool, enhanced: bool, parent: bool, project_root: bool, levels: int):
+    """Start file monitoring
+    
+    Examples:
+      fmon start                     # Monitor current directory
+      fmon start /path/to/dir        # Monitor specific directory  
+      fmon start --parent            # Monitor parent directory
+      fmon start --parent -l 2       # Monitor 2 levels up
+      fmon start --project-root      # Auto-detect project root
+      fmon start --enhanced          # Use enhanced monitor (no watch limits)
+      fmon start --enhanced --advanced # Combined enhanced + advanced features
+    """
+    
+    # 대상 디렉토리 결정
+    target_path = get_target_directory(path, parent, project_root, levels)
     
     # 경로 검증
-    if not os.path.exists(path):
-        console.print(f"ERROR: Path not found: {path}")
+    if not os.path.exists(target_path):
+        console.print(f"ERROR: Target path not found: {target_path}")
         sys.exit(1)
     
+    # 경로 정보 표시
+    if project_root:
+        console.print(f"Project root detected: {target_path}")
+        if target_path != os.path.abspath(path):
+            console.print(f"  (from: {os.path.abspath(path)})")
+    elif parent:
+        console.print(f"Monitoring parent directory ({levels} level{'s' if levels > 1 else ''} up): {target_path}")
+        console.print(f"  (from: {os.path.abspath(path)})")
+    
     # 절대 경로로 변환
-    abs_path = os.path.abspath(path)
+    abs_path = target_path
     
     # 이미 실행 중인지 확인
     ipc = MonitorIPC()
@@ -267,9 +362,18 @@ def start(path: str, background: bool, config: str, advanced: bool):
     config_manager = ConfigManager(config)
     monitor_config = config_manager.load_config()
     
-    # 실행할 프로그램 선택
-    monitor_executable = './build/advanced_monitor' if advanced else './build/main'
-    monitor_name = 'Advanced Monitor' if advanced else 'Standard Monitor'
+    # 실행할 프로그램 선택 (스크립트 위치 기준 절대 경로)
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    if enhanced:
+        monitor_executable = os.path.join(script_dir, 'build', 'enhanced_monitor')
+        monitor_name = 'Enhanced Monitor'
+    elif advanced:
+        monitor_executable = os.path.join(script_dir, 'build', 'advanced_monitor')
+        monitor_name = 'Advanced Monitor'
+    else:
+        monitor_executable = os.path.join(script_dir, 'build', 'main')
+        monitor_name = 'Standard Monitor'
     
     # 실행 파일 존재 확인
     if not os.path.exists(monitor_executable):
@@ -283,7 +387,9 @@ def start(path: str, background: bool, config: str, advanced: bool):
     console.print(f"Recursive: {'Yes' if monitor_config['recursive'] else 'No'}")
     console.print(f"Mode: {'Background' if background else 'Foreground'}")
     
-    if advanced:
+    if enhanced:
+        console.print("Features: Dynamic Watch Management, Auto-scaling, Enhanced Stats")
+    elif advanced:
         console.print("Features: Checksum, Log Rotation, Performance Stats")
     
     if monitor_config['extensions']:
@@ -378,14 +484,43 @@ def stop():
 
 @cli.command()
 def status():
-    """Check monitor status"""
+    """Check monitor status (supports all monitor types)"""
     
     # 테이블 생성
     table = Table(title="File Monitor Status", box=box.SIMPLE)
     table.add_column("Item", style="cyan", no_wrap=True)
     table.add_column("Value", style="white")
     
-    # 실행 상태 확인
+    # Enhanced Monitor 상태 확인
+    enhanced_stats_file = "enhanced_stats.json"
+    enhanced_log_file = "enhanced_monitor.log"
+    enhanced_running = False
+    
+    if os.path.exists(enhanced_stats_file):
+        try:
+            with open(enhanced_stats_file, 'r') as f:
+                enhanced_stats = json.load(f)
+            
+            # Enhanced monitor는 통계 파일로 실행 상태 확인
+            if enhanced_stats.get('uptime_seconds', 0) > 0:
+                enhanced_running = True
+                table.add_row("Enhanced Monitor", "[green]Running[/green]")
+                table.add_row("Active Watches", f"{enhanced_stats.get('active_watches', 0):,}")
+                table.add_row("Total Events", f"{enhanced_stats.get('total_events', 0):,}")
+                table.add_row("Memory Usage", f"{enhanced_stats.get('memory_usage_kb', 0):,} KB")
+                
+                uptime = enhanced_stats.get('uptime_seconds', 0)
+                hours = uptime // 3600
+                minutes = (uptime % 3600) // 60
+                seconds = uptime % 60
+                table.add_row("Enhanced Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        except:
+            table.add_row("Enhanced Monitor", "Stopped")
+    else:
+        table.add_row("Enhanced Monitor", "Stopped")
+    
+    # 기본 모니터 실행 상태 확인
+    basic_running = False
     if os.path.exists(PID_FILE):
         try:
             with open(PID_FILE, 'r') as f:
@@ -394,7 +529,8 @@ def status():
             # 프로세스 존재 확인
             try:
                 os.kill(pid, 0)
-                table.add_row("Status", "Running")
+                basic_running = True
+                table.add_row("Basic Monitor", "[green]Running[/green]")
                 table.add_row("PID", str(pid))
                 
                 # 프로세스 정보
@@ -408,30 +544,41 @@ def status():
                     pass
                     
             except ProcessLookupError:
-                table.add_row("Status", "Stopped (PID file exists but no process)")
+                table.add_row("Basic Monitor", "Stopped (PID file exists but no process)")
                 os.remove(PID_FILE)
                 
         except Exception as e:
-            table.add_row("Status", f"Error: {e}")
+            table.add_row("Basic Monitor", f"Error: {e}")
     else:
-        table.add_row("Status", "Stopped")
+        table.add_row("Basic Monitor", "Stopped")
     
-    # 로그 파일 정보
+    # 전체 상태 요약
+    if enhanced_running or basic_running:
+        table.add_row("Overall Status", "[green]Monitoring Active[/green]")
+    else:
+        table.add_row("Overall Status", "[red]All Monitors Stopped[/red]")
+    
+    # Enhanced Monitor 로그 파일 정보
+    if os.path.exists(enhanced_log_file):
+        stat = os.stat(enhanced_log_file)
+        table.add_row("Enhanced Log", enhanced_log_file)
+        table.add_row("Enhanced Log Size", format_file_size(stat.st_size))
+        table.add_row("Enhanced Log Modified", datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
+    
+    # 기본 로그 파일 정보
     if os.path.exists(LOG_FILE):
         stat = os.stat(LOG_FILE)
-        table.add_row("Log File", LOG_FILE)
-        table.add_row("Log Size", format_file_size(stat.st_size))
-        table.add_row("Last Modified", datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
+        table.add_row("Basic Log", LOG_FILE)
+        table.add_row("Basic Log Size", format_file_size(stat.st_size))
+        table.add_row("Basic Log Modified", datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
         
         # 라인 수 계산
         try:
             with open(LOG_FILE, 'r') as f:
                 line_count = sum(1 for _ in f)
-            table.add_row("Log Lines", f"{line_count:,}")
+            table.add_row("Basic Log Lines", f"{line_count:,}")
         except:
             pass
-    else:
-        table.add_row("Log File", "None")
     
     # 설정 파일 정보
     if os.path.exists(CONFIG_FILE):
@@ -458,45 +605,86 @@ def logs():
 
 @logs.command()
 @click.option('--lines', '-n', default=20, help='Number of lines to display')
-def show(lines: int):
-    """View recent logs"""
+@click.option('--enhanced', is_flag=True, help='Show enhanced monitor logs')
+def show(lines: int, enhanced: bool):
+    """View recent logs (supports all monitor types)"""
     
-    if not os.path.exists(LOG_FILE):
-        console.print("WARNING: Log file not found")
+    # Enhanced Monitor 로그 파일 확인
+    enhanced_log_file = "enhanced_monitor.log"
+    basic_log_file = LOG_FILE
+    
+    if enhanced:
+        log_file = enhanced_log_file
+        log_type = "Enhanced Monitor"
+    else:
+        log_file = basic_log_file
+        log_type = "Basic Monitor"
+    
+    if not os.path.exists(log_file):
+        if enhanced:
+            console.print("WARNING: Enhanced monitor log file not found")
+            console.print("Start enhanced monitor first: fmon start --enhanced")
+        else:
+            console.print("WARNING: Log file not found")
+            console.print("Start monitor first: fmon start")
         return
     
     try:
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+        with open(log_file, 'r', encoding='utf-8') as f:
             all_lines = f.readlines()
         
         recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
         
-        console.print(f"Recent {len(recent_lines)} lines from log:")
-        console.print("=" * 50)
+        console.print(f"Recent {len(recent_lines)} lines from {log_type} log:")
+        console.print("=" * 60)
         
         for line in recent_lines:
             line = line.strip()
             if line:
-                console.print(line)
+                # Enhanced monitor 로그 색상 지정
+                if enhanced and ('ERROR' in line or 'WARN' in line):
+                    console.print(f"[red]{line}[/red]")
+                elif enhanced and ('INFO' in line):
+                    console.print(f"[green]{line}[/green]")
+                elif enhanced and ('DEBUG' in line):
+                    console.print(f"[dim]{line}[/dim]")
+                else:
+                    console.print(line)
                     
     except Exception as e:
         console.print(f"ERROR: Failed to read log: {e}")
 
 @logs.command()
-def tail():
-    """Real-time log viewing"""
+@click.option('--enhanced', is_flag=True, help='Tail enhanced monitor logs')
+def tail(enhanced: bool):
+    """Real-time log viewing (supports all monitor types)"""
     
-    if not os.path.exists(LOG_FILE):
-        console.print("WARNING: Log file not found")
-        console.print("Start monitor first: fmon start")
+    # Enhanced Monitor 로그 파일 확인
+    enhanced_log_file = "enhanced_monitor.log"
+    basic_log_file = LOG_FILE
+    
+    if enhanced:
+        log_file = enhanced_log_file
+        log_type = "Enhanced Monitor"
+    else:
+        log_file = basic_log_file
+        log_type = "Basic Monitor"
+    
+    if not os.path.exists(log_file):
+        if enhanced:
+            console.print("WARNING: Enhanced monitor log file not found")
+            console.print("Start enhanced monitor first: fmon start --enhanced")
+        else:
+            console.print("WARNING: Log file not found")
+            console.print("Start monitor first: fmon start")
         return
     
-    console.print("Real-time log monitoring (Press Ctrl+C to exit)")
-    console.print("=" * 50)
+    console.print(f"Real-time {log_type} log monitoring (Press Ctrl+C to exit)")
+    console.print("=" * 60)
     
     try:
         # tail -f implementation
-        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+        with open(log_file, 'r', encoding='utf-8') as f:
             # Move to end of file
             f.seek(0, 2)
             
@@ -504,12 +692,20 @@ def tail():
                 line = f.readline()
                 if line:
                     line = line.strip()
-                    console.print(line)
+                    # Enhanced monitor 로그 색상 지정
+                    if enhanced and ('ERROR' in line or 'WARN' in line):
+                        console.print(f"[red]{line}[/red]")
+                    elif enhanced and ('INFO' in line):
+                        console.print(f"[green]{line}[/green]")
+                    elif enhanced and ('DEBUG' in line):
+                        console.print(f"[dim]{line}[/dim]")
+                    else:
+                        console.print(line)
                 else:
                     time.sleep(0.1)
                     
     except KeyboardInterrupt:
-        console.print("\nReal-time log monitoring stopped")
+        console.print(f"\nReal-time {log_type} log monitoring stopped")
     except Exception as e:
         console.print(f"ERROR: Log monitoring failed: {e}")
 
@@ -749,61 +945,116 @@ def build(target: str):
 
 @cli.command()
 def perf():
-    """View performance statistics (advanced monitor only)"""
+    """View performance statistics (supports all monitor types)"""
     
-    stats_file = "performance_stats.json"
+    # Enhanced Monitor 통계 파일 확인
+    enhanced_stats_file = "enhanced_stats.json"
+    advanced_stats_file = "performance_stats.json"
     
-    if not os.path.exists(stats_file):
-        console.print("WARNING: Performance statistics not available")
-        console.print("Start advanced monitor first: fmon start --advanced")
+    enhanced_available = os.path.exists(enhanced_stats_file)
+    advanced_available = os.path.exists(advanced_stats_file)
+    
+    if not enhanced_available and not advanced_available:
+        console.print("WARNING: No performance statistics available")
+        console.print("Start monitor first:")
+        console.print("  fmon start --enhanced    # Enhanced statistics")
+        console.print("  fmon start --advanced    # Advanced statistics")
         return
     
-    try:
-        with open(stats_file, 'r') as f:
-            stats = json.load(f)
-        
-        # Performance table
-        perf_table = Table(title="Performance Statistics", box=box.SIMPLE)
-        perf_table.add_column("Metric", style="cyan")
-        perf_table.add_column("Value", style="white")
-        perf_table.add_column("Unit", style="dim")
-        
-        # CPU and Memory stats
-        if 'cpu_usage' in stats:
-            perf_table.add_row("CPU Usage", f"{stats['cpu_usage']:.1f}", "%")
-        if 'memory_usage' in stats:
-            perf_table.add_row("Memory Usage", f"{stats['memory_usage']:.1f}", "MB")
-        if 'memory_peak' in stats:
-            perf_table.add_row("Peak Memory", f"{stats['memory_peak']:.1f}", "MB")
-        
-        # File operation stats
-        if 'files_processed' in stats:
-            perf_table.add_row("Files Processed", f"{stats['files_processed']:,}", "files")
-        if 'events_per_second' in stats:
-            perf_table.add_row("Events/Second", f"{stats['events_per_second']:.2f}", "ops/s")
-        if 'checksums_computed' in stats:
-            perf_table.add_row("Checksums Computed", f"{stats['checksums_computed']:,}", "files")
-        
-        # Timing stats
-        if 'avg_processing_time' in stats:
-            perf_table.add_row("Avg Processing Time", f"{stats['avg_processing_time']:.3f}", "ms")
-        if 'uptime' in stats:
-            hours = stats['uptime'] // 3600
-            minutes = (stats['uptime'] % 3600) // 60
-            seconds = stats['uptime'] % 60
-            perf_table.add_row("Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}", "h:m:s")
-        
-        console.print(perf_table)
-        
-        # Update time
-        if 'last_updated' in stats:
-            update_time = datetime.fromtimestamp(stats['last_updated']).strftime("%Y-%m-%d %H:%M:%S")
-            console.print(f"\nLast updated: {update_time}")
-        
-    except json.JSONDecodeError:
-        console.print("ERROR: Invalid performance statistics file")
-    except Exception as e:
-        console.print(f"ERROR: Failed to read performance statistics: {e}")
+    # Enhanced Monitor 통계 표시
+    if enhanced_available:
+        try:
+            with open(enhanced_stats_file, 'r') as f:
+                enhanced_stats = json.load(f)
+            
+            console.print("\n=== ENHANCED MONITOR STATISTICS ===")
+            
+            # Enhanced statistics table
+            enhanced_table = Table(title="Enhanced Monitor Performance", box=box.SIMPLE)
+            enhanced_table.add_column("Metric", style="cyan")
+            enhanced_table.add_column("Value", style="white")
+            enhanced_table.add_column("Details", style="dim")
+            
+            # Core metrics
+            enhanced_table.add_row("Total Events", f"{enhanced_stats.get('total_events', 0):,}", "events processed")
+            enhanced_table.add_row("Active Watches", f"{enhanced_stats.get('active_watches', 0):,}", "directories monitored")
+            enhanced_table.add_row("Watch Capacity", f"{enhanced_stats.get('watch_capacity', 0):,}", "max directories")
+            enhanced_table.add_row("Memory Usage", f"{enhanced_stats.get('memory_usage_kb', 0):,}", "KB")
+            enhanced_table.add_row("Watch Limit Hits", f"{enhanced_stats.get('watch_limit_hits', 0):,}", "expansion triggers")
+            enhanced_table.add_row("Memory Reallocations", f"{enhanced_stats.get('memory_reallocations', 0):,}", "dynamic expansions")
+            
+            if enhanced_stats.get('most_active_path') and enhanced_stats.get('most_active_path') != 'none':
+                enhanced_table.add_row("Most Active Path", enhanced_stats['most_active_path'][:50] + "...", 
+                                     f"{enhanced_stats.get('max_events_per_path', 0)} events")
+            
+            if 'uptime_seconds' in enhanced_stats:
+                uptime = enhanced_stats['uptime_seconds']
+                hours = uptime // 3600
+                minutes = (uptime % 3600) // 60
+                seconds = uptime % 60
+                enhanced_table.add_row("Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}", "h:m:s")
+            
+            console.print(enhanced_table)
+            
+        except json.JSONDecodeError:
+            console.print("ERROR: Invalid enhanced statistics file")
+        except Exception as e:
+            console.print(f"ERROR: Failed to read enhanced statistics: {e}")
+    
+    # Advanced Monitor 통계 표시 (기존 코드)
+    if advanced_available:
+        try:
+            with open(advanced_stats_file, 'r') as f:
+                stats = json.load(f)
+            
+            console.print("\n=== ADVANCED MONITOR STATISTICS ===")
+            
+            # Performance table
+            perf_table = Table(title="Advanced Monitor Performance", box=box.SIMPLE)
+            perf_table.add_column("Metric", style="cyan")
+            perf_table.add_column("Value", style="white")
+            perf_table.add_column("Unit", style="dim")
+            
+            # CPU and Memory stats
+            if 'cpu_usage' in stats:
+                perf_table.add_row("CPU Usage", f"{stats['cpu_usage']:.1f}", "%")
+            if 'memory_usage' in stats:
+                perf_table.add_row("Memory Usage", f"{stats['memory_usage']:.1f}", "MB")
+            if 'memory_peak' in stats:
+                perf_table.add_row("Peak Memory", f"{stats['memory_peak']:.1f}", "MB")
+            
+            # File operation stats
+            if 'files_processed' in stats:
+                perf_table.add_row("Files Processed", f"{stats['files_processed']:,}", "files")
+            if 'events_per_second' in stats:
+                perf_table.add_row("Events/Second", f"{stats['events_per_second']:.2f}", "ops/s")
+            if 'checksums_computed' in stats:
+                perf_table.add_row("Checksums Computed", f"{stats['checksums_computed']:,}", "files")
+            
+            # Timing stats
+            if 'avg_processing_time' in stats:
+                perf_table.add_row("Avg Processing Time", f"{stats['avg_processing_time']:.3f}", "ms")
+            if 'uptime' in stats:
+                hours = stats['uptime'] // 3600
+                minutes = (stats['uptime'] % 3600) // 60
+                seconds = stats['uptime'] % 60
+                perf_table.add_row("Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}", "h:m:s")
+            
+            console.print(perf_table)
+            
+            # Update time
+            if 'last_updated' in stats:
+                update_time = datetime.fromtimestamp(stats['last_updated']).strftime("%Y-%m-%d %H:%M:%S")
+                console.print(f"\nLast updated: {update_time}")
+            
+        except json.JSONDecodeError:
+            console.print("ERROR: Invalid performance statistics file")
+        except Exception as e:
+            console.print(f"ERROR: Failed to read performance statistics: {e}")
+
+
+@cli.command()  
+def dashboard():
     """Real-time dashboard"""
     
     def create_dashboard():

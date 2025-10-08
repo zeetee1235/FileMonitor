@@ -125,7 +125,9 @@ class InteractiveFileMonitor:
         
         choices = [
             ('Current directory', '.'),
-            ('Choose directory', 'choose'),
+            ('Parent directory', 'parent'),
+            ('Project root (auto-detect)', 'project-root'),
+            ('Choose specific directory', 'choose'),
             ('Advanced monitoring', 'advanced'),
             ('Back to main menu', 'back')
         ]
@@ -143,22 +145,56 @@ class InteractiveFileMonitor:
             
             if option == 'back':
                 return
+            elif option == 'parent':
+                # Parent directory options
+                level_choices = [
+                    ('1 level up (parent)', '1'),
+                    ('2 levels up (grandparent)', '2'), 
+                    ('3 levels up', '3'),
+                    ('Back', 'back')
+                ]
+                level_q = [inquirer.List('levels', message="How many levels up?", choices=level_choices)]
+                level_ans = inquirer.prompt(level_q, theme=GreenPassion())
+                if not level_ans or level_ans['levels'] == 'back':
+                    return
+                
+                cmd = f"start . --parent -l {level_ans['levels']} --background"
+                
+            elif option == 'project-root':
+                cmd = "start . --project-root --background"
+                
             elif option == 'choose':
                 # Simple directory input
                 path = input("Enter directory path: ").strip()
                 if not path:
                     path = '.'
-            elif option == 'advanced':
-                path = '.'
-            else:
-                path = option
+                cmd = f"start {path} --background"
                 
-            console.print(f"\nStarting monitor for: {path}")
-            
-            if option == 'advanced':
-                stdout, stderr, code = self.run_fmon_command(f"start {path} --background --advanced")
+            elif option == 'advanced':
+                # Advanced monitoring with options
+                adv_choices = [
+                    ('Current directory', '.'),
+                    ('Parent directory', 'parent'),
+                    ('Project root', 'project-root'),
+                    ('Back', 'back')
+                ]
+                adv_q = [inquirer.List('target', message="Advanced monitoring target:", choices=adv_choices)]
+                adv_ans = inquirer.prompt(adv_q, theme=GreenPassion())
+                if not adv_ans or adv_ans['target'] == 'back':
+                    return
+                    
+                if adv_ans['target'] == 'parent':
+                    cmd = "start . --parent --advanced --background"
+                elif adv_ans['target'] == 'project-root':
+                    cmd = "start . --project-root --advanced --background"
+                else:
+                    cmd = f"start {adv_ans['target']} --advanced --background"
             else:
-                stdout, stderr, code = self.run_fmon_command(f"start {path} --background")
+                cmd = f"start {option} --background"
+                
+            console.print(f"\nExecuting: {cmd}")
+            
+            stdout, stderr, code = self.run_fmon_command(cmd)
             
             if stdout:
                 console.print(stdout)

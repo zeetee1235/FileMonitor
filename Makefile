@@ -12,13 +12,15 @@ INSTALL_DIR = /usr/local/bin
 # Targets
 MAIN_TARGET = $(BUILD_DIR)/main
 ADVANCED_TARGET = $(BUILD_DIR)/advanced_monitor
+ENHANCED_TARGET = $(BUILD_DIR)/enhanced_monitor
 
 # Source files
 MAIN_SRC = $(SRC_DIR)/main.c
 ADVANCED_SRC = $(SRC_DIR)/advanced_monitor.c
+ENHANCED_SRC = $(SRC_DIR)/enhanced_monitor.c
 
 # Default target
-all: $(MAIN_TARGET) $(ADVANCED_TARGET)
+all: $(MAIN_TARGET) $(ADVANCED_TARGET) $(ENHANCED_TARGET)
 
 # Create build directory
 $(BUILD_DIR):
@@ -32,12 +34,18 @@ $(MAIN_TARGET): $(MAIN_SRC) | $(BUILD_DIR)
 $(ADVANCED_TARGET): $(ADVANCED_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
+# Build enhanced monitor  
+$(ENHANCED_TARGET): $(ENHANCED_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+
 # Install targets
-install: $(MAIN_TARGET) $(ADVANCED_TARGET)
+install: $(MAIN_TARGET) $(ADVANCED_TARGET) $(ENHANCED_TARGET)
 	sudo cp $(MAIN_TARGET) $(INSTALL_DIR)/file_monitor
 	sudo cp $(ADVANCED_TARGET) $(INSTALL_DIR)/advanced_monitor
+	sudo cp $(ENHANCED_TARGET) $(INSTALL_DIR)/enhanced_monitor
 	sudo chmod +x $(INSTALL_DIR)/file_monitor
 	sudo chmod +x $(INSTALL_DIR)/advanced_monitor
+	sudo chmod +x $(INSTALL_DIR)/enhanced_monitor
 
 # Clean build files
 clean:
