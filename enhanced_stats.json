@@ -1,1 +1,1 @@
-{"total_events":6,"active_watches":0,"watch_capacity":0,"memory_usage_kb":3988,"watch_limit_hits":0,"memory_reallocations":0,"most_active_path":"\/tmp","max_events_per_path":6,"uptime_seconds":42}
+{"total_events":502,"active_watches":1,"watch_capacity":1024,"memory_usage_kb":3984,"watch_limit_hits":0,"memory_reallocations":0,"most_active_path":"\/home\/dev\/FileMonitor","max_events_per_path":502,"uptime_seconds":240}

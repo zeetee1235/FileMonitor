@@ -4,20 +4,7 @@ Real-time file system monitoring tool with simple terminal interface and compreh
 
 ![File Monitor Screenshot](docs/screenshot.png)
 
-## Features
-
-- **Real-time monitoring** - Track file changes instantly using Linux inotify
-- **Enhanced monitoring** - Dynamic watch management with unlimited capacity
-- **Parent directory monitoring** - Monitor project root or parent directories automatically
-- **Simple CLI** - Clean terminal interface with plain text output
-- **Interactive mode** - Navigate with arrow keys and intuitive menus
-- **Comprehensive logging** - Detailed event tracking with timestamps and real-time statistics
-- **Flexible filtering** - Monitor specific file extensions or all files
-- **Multiple interfaces** - Command-line, interactive, and basic status display
-- **Background operation** - Run monitoring in the background
-- **Project root detection** - Automatically detect Git repositories, Python projects, and more
-- **Easy setup** - Simple installation and configuration
-
+#
 ## Quick Start
 
 ### One-Command Setup & Run
@@ -186,10 +173,6 @@ python3 src/fmon.py config show
 - **Log rotation**: Automatic log management for enhanced monitor
 - **Color-coded logs**: Error, info, and debug level highlighting
 
-### User Interface
-- **Simple CLI**: Clean terminal output
-- **Interactive menus**: Arrow key navigation
-- **Status display**: Current monitoring information
 
 ## Advanced Usage
 

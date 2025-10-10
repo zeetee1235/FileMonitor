@@ -185,6 +185,9 @@ build_c_program() {
 
 # 수동 빌드 함수
 build_manually() {
+    # build 디렉토리 생성
+    mkdir -p build
+    
     # 기본 모니터 빌드
     if [ -f "src/main.c" ]; then
         print_info "Building basic monitor..."
@@ -207,12 +210,19 @@ build_manually() {
         if gcc -Wall -Wextra -g -O2 -pthread -o build/advanced_monitor src/advanced_monitor.c -ljson-c -lssl -lcrypto -lz -lpcre 2>/dev/null; then
             print_success "Advanced monitor build successful!"
         else
-            print_warning "Advanced monitor dependencies not available. Only basic monitor will be available."
+            print_warning "Advanced monitor dependencies not available."
         fi
     fi
     
-    # build 디렉토리 생성
-    mkdir -p build
+    # Enhanced 모니터 빌드 (새 기능)
+    if [ -f "src/enhanced_monitor.c" ]; then
+        print_info "Building enhanced monitor..."
+        if gcc -Wall -Wextra -g -O2 -pthread -o build/enhanced_monitor src/enhanced_monitor.c -ljson-c 2>/dev/null; then
+            print_success "Enhanced monitor build successful!"
+        else
+            print_warning "Enhanced monitor build failed. JSON-C library required."
+        fi
+    fi
 }
 
 # 설정 파일 생성
@@ -339,6 +349,12 @@ check_system_status() {
         echo -e "${CYAN}|${NC} Advanced Monitor: ${YELLOW}Not Built${NC}           |"
     fi
     
+    if [ -f "build/enhanced_monitor" ]; then
+        echo -e "${CYAN}|${NC} Enhanced Monitor: ${GREEN}Built${NC}               |"
+    else
+        echo -e "${CYAN}|${NC} Enhanced Monitor: ${YELLOW}Not Built${NC}           |"
+    fi
+    
     if [ -f "src/fmon.py" ]; then
         echo -e "${CYAN}|${NC} Python CLI:     ${GREEN}Ready${NC}                |"
     else
@@ -379,17 +395,19 @@ show_execution_menu() {
     print_step "Please select an execution option:"
     echo ""
     echo -e "${GREEN}1)${NC} Interactive Mode (Arrow keys + Enter)"
-    echo -e "${GREEN}2)${NC} Start Background Monitoring (Basic)"
-    echo -e "${GREEN}3)${NC} Start Advanced Monitoring (with performance stats)"
-    echo -e "${GREEN}4)${NC} Check Current Status"
-    echo -e "${GREEN}5)${NC} View Recent Logs"
-    echo -e "${GREEN}6)${NC} Real-time Dashboard"
-    echo -e "${GREEN}7)${NC} View Configuration"
-    echo -e "${GREEN}8)${NC} Performance Statistics (Advanced only)"
-    echo -e "${GREEN}9)${NC} Create Test Files and Test Monitoring"
-    echo -e "${GREEN}10)${NC} Exit"
+    echo -e "${GREEN}2)${NC} Start Basic Monitoring (Background)"
+    echo -e "${GREEN}3)${NC} Start Advanced Monitoring (with checksums)"
+    echo -e "${GREEN}4)${NC} Start Enhanced Monitoring (unlimited capacity)"
+    echo -e "${GREEN}5)${NC} Parent Directory Monitoring"
+    echo -e "${GREEN}6)${NC} Project Root Auto-detection"
+    echo -e "${GREEN}7)${NC} Check Current Status (Real-time)"
+    echo -e "${GREEN}8)${NC} View Recent Logs"
+    echo -e "${GREEN}9)${NC} Performance Statistics (Real-time)"
+    echo -e "${GREEN}10)${NC} View Configuration"
+    echo -e "${GREEN}11)${NC} Create Test Files and Test Monitoring"
+    echo -e "${GREEN}12)${NC} Exit"
     echo ""
-    echo -n "Choice (1-10): "
+    echo -n "Choice (1-12): "
     read choice
     
     case $choice in
@@ -410,36 +428,49 @@ show_execution_menu() {
             python3 src/fmon.py status
             ;;
         4)
-            print_info "Checking current status..."
+            print_info "Starting enhanced background monitoring..."
+            python3 src/fmon.py start . --background --enhanced
+            sleep 2
             python3 src/fmon.py status
             ;;
         5)
+            print_info "Starting parent directory monitoring..."
+            python3 src/fmon.py start . --parent --background
+            sleep 2
+            python3 src/fmon.py status
+            ;;
+        6)
+            print_info "Starting project root monitoring..."
+            python3 src/fmon.py start . --project-root --enhanced --background
+            sleep 2
+            python3 src/fmon.py status
+            ;;
+        7)
+            print_info "Checking current status (real-time)..."
+            python3 src/fmon.py status
+            ;;
+        8)
             print_info "Displaying recent logs..."
             python3 src/fmon.py logs show -n 10
             ;;
-        6)
-            print_info "Starting real-time dashboard... (Press Q to exit)"
-            sleep 1
-            python3 src/fmon.py dashboard
+        9)
+            print_info "Displaying performance statistics (real-time)..."
+            python3 src/fmon.py perf
             ;;
-        7)
+        10)
             print_info "Displaying current configuration..."
             python3 src/fmon.py config show
             ;;
-        8)
-            print_info "Displaying performance statistics..."
-            python3 src/fmon.py perf
-            ;;
-        9)
+        11)
             print_info "Running test..."
             run_test_demo
             ;;
-        10)
+        12)
             print_info "Exiting script."
             exit 0
             ;;
         *)
-            print_error "Invalid choice. Please enter a number between 1-10."
+            print_error "Invalid choice. Please enter a number between 1-12."
             show_execution_menu
             ;;
     esac
@@ -447,32 +478,53 @@ show_execution_menu() {
 
 # 테스트 데모 실행
 run_test_demo() {
-    print_step "Running file monitoring test..."
+    print_step "Running enhanced file monitoring test..."
     
     # 모니터가 실행 중인지 확인
-    if [ ! -f "monitor.pid" ]; then
-        print_info "Starting monitoring for test..."
-        python3 src/fmon.py start test_dir --background
+    if [ ! -f "monitor.pid" ] && [ ! -f "enhanced_stats.json" ]; then
+        print_info "Starting enhanced monitoring for test..."
+        python3 src/fmon.py start test_dir --enhanced --background
         sleep 2
     fi
     
     print_info "Performing file change test in test_dir..."
     
     # 테스트 파일들 생성
-    echo "// Test file 1" > test_dir/test1.js
+    echo "// Test file 1 - $(date)" > test_dir/test1.js
     sleep 1
-    echo "<h1>Test HTML</h1>" > test_dir/test.html
+    echo "<h1>Test HTML - $(date)</h1>" > test_dir/test.html
     sleep 1
-    echo "body { color: red; }" > test_dir/test.css
+    echo "body { color: red; } /* $(date) */" > test_dir/test.css
+    sleep 1
+    echo "print('Python test - $(date)')" > test_dir/test.py
+    sleep 1
+    
+    # 중첩 디렉토리 테스트
+    mkdir -p test_dir/nested/deep
+    echo "console.log('Deep test - $(date)');" > test_dir/nested/deep/deep.js
     sleep 1
     
     print_success "Test files have been created!"
     print_info "Checking recent logs..."
-    sleep 1
+    sleep 2
     
-    python3 src/fmon.py logs show -n 5
+    # Enhanced monitor 로그가 있으면 우선 표시
+    if [ -f "enhanced_monitor.log" ]; then
+        print_info "Enhanced monitor logs:"
+        python3 src/fmon.py logs show --enhanced -n 8
+    else
+        print_info "Basic monitor logs:"
+        python3 src/fmon.py logs show -n 8
+    fi
     
-    print_info "Test completed. Please verify that file changes have been logged."
+    print_info "Performance statistics:"
+    python3 src/fmon.py perf
+    
+    print_success "Test completed. Enhanced monitoring demonstrates:"
+    echo "  - Real-time file change detection"
+    echo "  - Dynamic watch management"
+    echo "  - Performance statistics"
+    echo "  - No watch limits"
 }
 
 # 메인 실행 함수
