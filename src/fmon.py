@@ -486,10 +486,10 @@ def stop():
 def status():
     """Check monitor status (supports all monitor types)"""
     
-    # 테이블 생성
-    table = Table(title="File Monitor Status", box=box.SIMPLE)
-    table.add_column("Item", style="cyan", no_wrap=True)
-    table.add_column("Value", style="white")
+    # 테이블 생성 (터미널 크기에 맞게 조정)
+    table = Table(title="File Monitor Status", box=box.SIMPLE, width=80)
+    table.add_column("Item", style="cyan", no_wrap=True, width=20)
+    table.add_column("Value", style="white", width=50)
     
     # Enhanced Monitor 상태 확인
     enhanced_stats_file = "enhanced_stats.json"
@@ -721,10 +721,10 @@ def stats():
         return
     
     # Statistics table
-    table = Table(title="Log Statistics", box=box.SIMPLE)
-    table.add_column("Event Type", style="cyan")
-    table.add_column("Count", style="white", justify="right")
-    table.add_column("Percentage", style="green", justify="right")
+    table = Table(title="Log Statistics", box=box.SIMPLE, width=80)
+    table.add_column("Event Type", style="cyan", width=30)
+    table.add_column("Count", style="white", justify="right", width=15)
+    table.add_column("Percentage", style="green", justify="right", width=15)
     
     for event_type, count in stats["event_types"].items():
         percentage = (count / stats["total_events"]) * 100
@@ -970,10 +970,10 @@ def perf():
             console.print("\n=== ENHANCED MONITOR STATISTICS ===")
             
             # Enhanced statistics table
-            enhanced_table = Table(title="Enhanced Monitor Performance", box=box.SIMPLE)
-            enhanced_table.add_column("Metric", style="cyan")
-            enhanced_table.add_column("Value", style="white")
-            enhanced_table.add_column("Details", style="dim")
+            enhanced_table = Table(title="Enhanced Monitor Performance", box=box.SIMPLE, width=80)
+            enhanced_table.add_column("Metric", style="cyan", width=20)
+            enhanced_table.add_column("Value", style="white", width=15)
+            enhanced_table.add_column("Details", style="dim", width=30)
             
             # Core metrics
             enhanced_table.add_row("Total Events", f"{enhanced_stats.get('total_events', 0):,}", "events processed")
@@ -1010,9 +1010,10 @@ def perf():
             console.print("\n=== ADVANCED MONITOR STATISTICS ===")
             
             # Performance table
-            perf_table = Table(title="Advanced Monitor Performance", box=box.SIMPLE)
-            perf_table.add_column("Metric", style="cyan")
-            perf_table.add_column("Value", style="white")
+            perf_table = Table(title="Advanced Monitor Performance", box=box.SIMPLE, width=80)
+            perf_table.add_column("Metric", style="cyan", width=25)
+            perf_table.add_column("Value", style="white", width=20)
+            perf_table.add_column("Unit", style="dim", width=15)
             perf_table.add_column("Unit", style="dim")
             
             # CPU and Memory stats

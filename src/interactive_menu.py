@@ -234,27 +234,87 @@ class InteractiveFileMonitor:
 
     def show_status(self):
         """Show real-time status"""
-        console.clear()
-        console.print("Real-time Monitor Status")
-        console.print("Press Ctrl+C to exit or wait for auto-refresh every 2 seconds")
-        console.print("=" * 60)
-        
         try:
-            with Live(self.generate_status_display(), refresh_per_second=2, screen=False) as live:
-                start_time = time.time()
-                while True:
-                    time.sleep(0.5)
-                    live.update(self.generate_status_display())
-                    
-                    # Auto-exit after 30 seconds if no interaction
-                    if time.time() - start_time > 30:
-                        console.print("\n[dim]Auto-exiting after 30 seconds...[/dim]")
-                        break
-                        
+            while True:
+                console.clear()
+                console.print("Real-time Monitor Status")
+                console.print("Press Ctrl+C to exit")
+                console.print("=" * 50)
+                
+                # Simple status display without Live mode
+                self.display_status_info()
+                
+                print("\nRefreshing in 3 seconds...")
+                time.sleep(3)
+                
         except KeyboardInterrupt:
             console.print("\n[dim]Exiting real-time status...[/dim]")
         
         input("\nPress Enter to continue...")
+    
+    def display_status_info(self):
+        """Display status information in a terminal-friendly way"""
+        # Get basic status
+        stdout, stderr, code = self.run_fmon_command("status")
+        
+        if stdout:
+            # Parse and display status in a compact format
+            lines = stdout.strip().split('\n')
+            
+            console.print("\n[bold cyan]Monitor Status:[/bold cyan]")
+            for line in lines:
+                if '│' in line and 'Value' not in line and '─' not in line:
+                    # Clean up table formatting for plain text
+                    parts = line.split('│')
+                    if len(parts) >= 3:
+                        item = parts[1].strip()
+                        value = parts[2].strip()
+                        if item and value and item != 'Item':
+                            console.print(f"  {item}: {value}")
+        
+        # System resources (compact)
+        if PSUTIL_AVAILABLE:
+            try:
+                cpu_percent = psutil.cpu_percent(interval=None)
+                memory = psutil.virtual_memory()
+                
+                console.print(f"\n[bold blue]System Resources:[/bold blue]")
+                console.print(f"  CPU: {cpu_percent:.1f}%")
+                console.print(f"  RAM: {memory.percent:.1f}% ({memory.used/1024/1024/1024:.1f}GB)")
+                
+                # Monitor process info
+                is_running, pid = self.is_monitor_running()
+                if is_running:
+                    try:
+                        process = psutil.Process(pid)
+                        cpu_usage = process.cpu_percent()
+                        memory_mb = process.memory_info().rss / 1024 / 1024
+                        console.print(f"  Monitor CPU: {cpu_usage:.1f}%")
+                        console.print(f"  Monitor RAM: {memory_mb:.1f}MB")
+                    except:
+                        pass
+            except:
+                console.print("\n[dim]System resources unavailable[/dim]")
+        
+        # Enhanced stats (compact)
+        if os.path.exists("enhanced_stats.json"):
+            try:
+                with open("enhanced_stats.json", 'r') as f:
+                    stats = json.load(f)
+                
+                console.print(f"\n[bold yellow]Enhanced Monitor:[/bold yellow]")
+                console.print(f"  Events: {stats.get('total_events', 0):,}")
+                console.print(f"  Watches: {stats.get('active_watches', 0):,}")
+                console.print(f"  Memory: {stats.get('memory_usage_kb', 0):,}KB")
+                
+                uptime = stats.get('uptime_seconds', 0)
+                hours = uptime // 3600
+                minutes = (uptime % 3600) // 60
+                seconds = uptime % 60
+                console.print(f"  Uptime: {hours:02d}:{minutes:02d}:{seconds:02d}")
+                
+            except:
+                pass
     
     def generate_status_display(self):
         """Generate real-time status display"""
@@ -481,27 +541,82 @@ Uptime: {hours:02d}:{minutes:02d}:{seconds:02d}"""
 
     def show_performance(self):
         """Show real-time performance statistics"""
-        console.clear()
-        console.print("Real-time Performance Statistics")
-        console.print("Press Ctrl+C to exit or wait for auto-refresh every 2 seconds")
-        console.print("=" * 60)
-        
         try:
-            with Live(self.generate_performance_display(), refresh_per_second=2, screen=False) as live:
-                start_time = time.time()
-                while True:
-                    time.sleep(0.5)
-                    live.update(self.generate_performance_display())
-                    
-                    # Auto-exit after 30 seconds if no interaction
-                    if time.time() - start_time > 30:
-                        console.print("\n[dim]Auto-exiting after 30 seconds...[/dim]")
-                        break
-                        
+            while True:
+                console.clear()
+                console.print("Real-time Performance Statistics")
+                console.print("Press Ctrl+C to exit")
+                console.print("=" * 50)
+                
+                # Simple performance display without Live mode
+                self.display_performance_info()
+                
+                print("\nRefreshing in 3 seconds...")
+                time.sleep(3)
+                
         except KeyboardInterrupt:
             console.print("\n[dim]Exiting real-time performance...[/dim]")
         
         input("\nPress Enter to continue...")
+    
+    def display_performance_info(self):
+        """Display performance information in a terminal-friendly way"""
+        # Get performance stats
+        stdout, stderr, code = self.run_fmon_command("perf")
+        
+        if stdout:
+            console.print("\n[bold green]Performance Statistics:[/bold green]")
+            # Parse and display stats in a compact format
+            lines = stdout.strip().split('\n')
+            current_section = ""
+            
+            for line in lines:
+                line = line.strip()
+                if '===' in line:
+                    current_section = line.replace('=', '').strip()
+                    if current_section:
+                        console.print(f"\n[bold]{current_section}[/bold]")
+                elif '│' in line and 'Value' not in line and '─' not in line:
+                    # Clean up table formatting
+                    parts = line.split('│')
+                    if len(parts) >= 3:
+                        metric = parts[1].strip()
+                        value = parts[2].strip()
+                        details = parts[3].strip() if len(parts) > 3 else ""
+                        
+                        if metric and value and metric != 'Metric':
+                            if details:
+                                console.print(f"  {metric}: {value} ({details})")
+                            else:
+                                console.print(f"  {metric}: {value}")
+        else:
+            console.print("[dim]No performance data available[/dim]")
+        
+        # Additional real-time metrics
+        if PSUTIL_AVAILABLE:
+            try:
+                console.print(f"\n[bold blue]Real-time System Metrics:[/bold blue]")
+                
+                # CPU per core (limited to first 4 cores)
+                cpu_percent = psutil.cpu_percent(interval=None, percpu=True)
+                cpu_display = ', '.join([f'{c:.0f}%' for c in cpu_percent[:4]])
+                if len(cpu_percent) > 4:
+                    cpu_display += f" (+{len(cpu_percent)-4} more)"
+                console.print(f"  CPU Cores: {cpu_display}")
+                
+                # Memory details
+                memory = psutil.virtual_memory()
+                console.print(f"  Memory Available: {memory.available/1024/1024/1024:.1f}GB")
+                
+                # Process count
+                try:
+                    process_count = len(psutil.pids())
+                    console.print(f"  Processes: {process_count}")
+                except:
+                    pass
+                    
+            except:
+                console.print("[dim]System metrics unavailable[/dim]")
     
     def generate_performance_display(self):
         """Generate real-time performance display"""
