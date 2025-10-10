@@ -4,7 +4,7 @@ Real-time file system monitoring tool with simple terminal interface and compreh
 
 ![File Monitor Screenshot](docs/screenshot.png)
 
-#
+
 ## Quick Start
 
 ### One-Command Setup & Run
