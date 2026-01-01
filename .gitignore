@@ -1,35 +1,32 @@
-# Compiled binaries
-monitor
+# Build artifacts
+build/
 *.o
 *.so
 *.a
 
-# Log files
-monitor.log
+# Runtime files
+logs/
 *.log
-
-# Process ID files
-monitor.pid
+*.json
 *.pid
 
-# Backup files
-*.backup
-*.bak
-monitor.conf.backup
+# Test artifacts
+test_monitoring/
+*_test.txt
+*_stats.json
 
 # Python
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.egg-info/
-.python-version
-
-# Virtual environments
+.venv/
 venv/
 env/
-.venv/
+.python-version
 
-# IDE and editor files
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -37,18 +34,18 @@ env/
 *~
 .DS_Store
 
-# Test directories and files
-test_dir/
-test_files/
-*.test
-
 # Temporary files
 *.tmp
 *.temp
 .temp/
+test_dir/
+test_files/
+*.test
 
-# Configuration files (optional - remove if you want to track them)
-# monitor.conf
+# Backup files
+*.backup
+*.bak
+monitor.conf.backup
 
 # IPC sockets
 /tmp/file_monitor.sock

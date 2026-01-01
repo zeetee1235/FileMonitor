@@ -1,55 +1,49 @@
-# Makefile for Advanced File Monitor
+# Makefile for Unified File Monitor
 
 CC = gcc
 CFLAGS = -Wall -Wextra -g -O2 -pthread
-LIBS = -ljson-c -lssl -lcrypto -lz -lpcre
+LIBS = -ljson-c -lssl -lcrypto -lz
 
 # Directories
 SRC_DIR = src
 BUILD_DIR = build
 INSTALL_DIR = /usr/local/bin
+TEST_DIR = tests
+CONFIG_DIR = config
 
 # Targets
-MAIN_TARGET = $(BUILD_DIR)/main
-ADVANCED_TARGET = $(BUILD_DIR)/advanced_monitor
-ENHANCED_TARGET = $(BUILD_DIR)/enhanced_monitor
+TARGET = $(BUILD_DIR)/monitor
 
 # Source files
-MAIN_SRC = $(SRC_DIR)/main.c
-ADVANCED_SRC = $(SRC_DIR)/advanced_monitor.c
-ENHANCED_SRC = $(SRC_DIR)/enhanced_monitor.c
+SRC = $(SRC_DIR)/monitor.c
 
 # Default target
-all: $(MAIN_TARGET) $(ADVANCED_TARGET) $(ENHANCED_TARGET)
+all: $(TARGET)
 
 # Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Build main monitor
-$(MAIN_TARGET): $(MAIN_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $< -ljson-c
-
-# Build advanced monitor
-$(ADVANCED_TARGET): $(ADVANCED_SRC) | $(BUILD_DIR)
+# Build unified monitor
+$(TARGET): $(SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 
-# Build enhanced monitor  
-$(ENHANCED_TARGET): $(ENHANCED_SRC) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
-
-# Install targets
-install: $(MAIN_TARGET) $(ADVANCED_TARGET) $(ENHANCED_TARGET)
-	sudo cp $(MAIN_TARGET) $(INSTALL_DIR)/file_monitor
-	sudo cp $(ADVANCED_TARGET) $(INSTALL_DIR)/advanced_monitor
-	sudo cp $(ENHANCED_TARGET) $(INSTALL_DIR)/enhanced_monitor
+# Install target
+install: $(TARGET)
+	sudo cp $(TARGET) $(INSTALL_DIR)/file_monitor
 	sudo chmod +x $(INSTALL_DIR)/file_monitor
-	sudo chmod +x $(INSTALL_DIR)/advanced_monitor
-	sudo chmod +x $(INSTALL_DIR)/enhanced_monitor
+	@echo "Installed to $(INSTALL_DIR)/file_monitor"
+
+# Uninstall target
+uninstall:
+	sudo rm -f $(INSTALL_DIR)/file_monitor
+	@echo "Uninstalled file_monitor"
 
 # Clean build files
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -f *.log *.json *.pid
+	@echo "Cleaned build artifacts"
 
 # Check dependencies
 check-deps:
@@ -57,16 +51,37 @@ check-deps:
 	@pkg-config --exists json-c || (echo "Missing: libjson-c-dev" && exit 1)
 	@pkg-config --exists openssl || (echo "Missing: libssl-dev" && exit 1)
 	@pkg-config --exists zlib || (echo "Missing: zlib1g-dev" && exit 1)
-	@pkg-config --exists libpcre || (echo "Missing: libpcre3-dev" && exit 1)
 	@echo "All dependencies found!"
 
-# Development targets
+# Development target
 dev: check-deps all
 
-# Test targets
+# Test target
 test: all
-	@echo "Running basic tests..."
-	@./$(MAIN_TARGET) --version 2>/dev/null || echo "Main monitor test failed"
-	@./$(ADVANCED_TARGET) --version 2>/dev/null || echo "Advanced monitor test failed"
+	@echo "Running monitor tests..."
+	@./$(TARGET) --version
+	@./$(TARGET) --help
+	@echo "Basic compilation tests passed!"
+	@if [ -f $(TEST_DIR)/test.sh ]; then \
+		echo "Running test suite..."; \
+		cd $(TEST_DIR) && bash test.sh; \
+	else \
+		echo "Test suite not found at $(TEST_DIR)/test.sh"; \
+	fi
 
-.PHONY: all install clean check-deps dev test
+# Help target
+help:
+	@echo "Unified File Monitor - Build System"
+	@echo ""
+	@echo "Available targets:"
+	@echo "  make          - Build the unified monitor (default)"
+	@echo "  make all      - Same as make"
+	@echo "  make install  - Install to $(INSTALL_DIR)"
+	@echo "  make uninstall - Remove from $(INSTALL_DIR)"
+	@echo "  make clean    - Remove build artifacts"
+	@echo "  make check-deps - Verify all dependencies are installed"
+	@echo "  make dev      - Check dependencies and build"
+	@echo "  make test     - Run tests"
+	@echo "  make help     - Show this help message"
+
+.PHONY: all install uninstall clean check-deps dev test help

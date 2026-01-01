@@ -118,9 +118,9 @@ main() {
 test_project_structure() {
     print_test "Checking project directory structure"
     
-    required_dirs=("src" "docs" "examples")
-    required_files=("README.md" "LICENSE" "requirements.txt" "setup_and_run.sh")
-    required_src_files=("src/main.c" "src/fmon.py" "src/interactive_menu.py")
+    required_dirs=("src" "docs" "examples" "scripts" "config" "tests")
+    required_files=("README.md" "LICENSE" "requirements.txt" "scripts/setup.sh" "MIGRATION.md")
+    required_src_files=("src/monitor.c" "src/fmon.py" "src/interactive_menu.py")
     
     all_good=true
     
@@ -210,12 +210,14 @@ test_build_system() {
     fi
     
     # 빌드 테스트
-    if gcc -o monitor src/main.c -ljson-c -lpthread >/dev/null 2>&1; then
-        print_pass "C program builds with JSON-C"
-    elif gcc -o monitor src/main.c -lpthread >/dev/null 2>&1; then
-        print_pass "C program builds (basic version)"
+    if gcc -o /tmp/test_monitor src/monitor.c -ljson-c -lssl -lcrypto -lz -lpthread >/dev/null 2>&1; then
+        print_pass "Unified monitor builds successfully"
+        rm -f /tmp/test_monitor
+    elif gcc -o /tmp/test_monitor src/monitor.c -ljson-c -lpthread >/dev/null 2>&1; then
+        print_pass "Monitor builds (basic deps)"
+        rm -f /tmp/test_monitor
     else
-        print_fail "C program build failed"
+        print_fail "Monitor build failed"
     fi
     
     # 실행 파일 확인
@@ -384,32 +386,32 @@ test_log_system() {
 test_setup_scripts() {
     print_test "Testing setup scripts"
     
-    # setup_and_run.sh 실행 가능 여부
-    if [ -x "setup_and_run.sh" ]; then
-        print_pass "setup_and_run.sh is executable"
+    # scripts/setup.sh 실행 가능 여부
+    if [ -x "scripts/setup.sh" ]; then
+        print_pass "scripts/setup.sh is executable"
         
         # 스크립트 문법 확인
-        if bash -n setup_and_run.sh >/dev/null 2>&1; then
-            print_pass "setup_and_run.sh syntax is correct"
+        if bash -n scripts/setup.sh >/dev/null 2>&1; then
+            print_pass "scripts/setup.sh syntax is correct"
         else
-            print_fail "setup_and_run.sh has syntax errors"
+            print_fail "scripts/setup.sh has syntax errors"
         fi
         
     else
-        print_fail "setup_and_run.sh is not executable"
+        print_fail "scripts/setup.sh is not executable"
     fi
     
-    # run_interactive.sh 테스트
-    if [ -x "run_interactive.sh" ]; then
-        print_pass "run_interactive.sh is executable"
+    # scripts/run_interactive.sh 테스트
+    if [ -x "scripts/run_interactive.sh" ]; then
+        print_pass "scripts/run_interactive.sh is executable"
         
-        if bash -n run_interactive.sh >/dev/null 2>&1; then
-            print_pass "run_interactive.sh syntax is correct"
+        if bash -n scripts/run_interactive.sh >/dev/null 2>&1; then
+            print_pass "scripts/run_interactive.sh syntax is correct"
         else
-            print_fail "run_interactive.sh has syntax errors"
+            print_fail "scripts/run_interactive.sh has syntax errors"
         fi
     else
-        print_fail "run_interactive.sh is not executable"
+        print_fail "scripts/run_interactive.sh is not executable"
     fi
 }
 
