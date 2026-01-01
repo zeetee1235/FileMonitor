@@ -310,22 +310,21 @@ def cli(ctx, interactive):
 @click.argument('path', default='.')
 @click.option('--background', '-b', is_flag=True, help='Run in background')
 @click.option('--config', '-c', default=CONFIG_FILE, help='Configuration file path')
-@click.option('--advanced', '-a', is_flag=True, help='Use advanced monitoring features')
-@click.option('--enhanced', '-e', is_flag=True, help='Use enhanced monitoring (dynamic watch management)')
+@click.option('--mode', '-m', type=click.Choice(['basic', 'advanced', 'enhanced']), default='basic', help='Monitor mode')
 @click.option('--parent', '-p', is_flag=True, help='Monitor parent directory')
 @click.option('--project-root', '-r', is_flag=True, help='Auto-detect and monitor project root')
 @click.option('--levels', '-l', type=int, default=1, help='Number of parent levels to go up (with --parent)')
-def start(path: str, background: bool, config: str, advanced: bool, enhanced: bool, parent: bool, project_root: bool, levels: int):
+def start(path: str, background: bool, config: str, mode: str, parent: bool, project_root: bool, levels: int):
     """Start file monitoring
     
     Examples:
-      fmon start                     # Monitor current directory
-      fmon start /path/to/dir        # Monitor specific directory  
-      fmon start --parent            # Monitor parent directory
-      fmon start --parent -l 2       # Monitor 2 levels up
-      fmon start --project-root      # Auto-detect project root
-      fmon start --enhanced          # Use enhanced monitor (no watch limits)
-      fmon start --enhanced --advanced # Combined enhanced + advanced features
+      fmon start                         # Monitor current directory (basic mode)
+      fmon start /path/to/dir            # Monitor specific directory  
+      fmon start --parent                # Monitor parent directory
+      fmon start --parent -l 2           # Monitor 2 levels up
+      fmon start --project-root          # Auto-detect project root
+      fmon start --mode=enhanced         # Use enhanced monitor (no watch limits)
+      fmon start --mode=advanced         # Use advanced monitor (checksums, compression)
     """
     
     # 대상 디렉토리 결정
@@ -364,16 +363,7 @@ def start(path: str, background: bool, config: str, advanced: bool, enhanced: bo
     
     # 실행할 프로그램 선택 (스크립트 위치 기준 절대 경로)
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    if enhanced:
-        monitor_executable = os.path.join(script_dir, 'build', 'enhanced_monitor')
-        monitor_name = 'Enhanced Monitor'
-    elif advanced:
-        monitor_executable = os.path.join(script_dir, 'build', 'advanced_monitor')
-        monitor_name = 'Advanced Monitor'
-    else:
-        monitor_executable = os.path.join(script_dir, 'build', 'main')
-        monitor_name = 'Standard Monitor'
+    monitor_executable = os.path.join(script_dir, 'build', 'monitor')
     
     # 실행 파일 존재 확인
     if not os.path.exists(monitor_executable):
@@ -381,16 +371,24 @@ def start(path: str, background: bool, config: str, advanced: bool, enhanced: bo
         console.print("Build first: make all")
         sys.exit(1)
     
+    # 모드별 이름 및 기능 표시
+    mode_names = {
+        'basic': 'Basic Monitor',
+        'advanced': 'Advanced Monitor',
+        'enhanced': 'Enhanced Monitor'
+    }
+    mode_features = {
+        'basic': 'Simple file monitoring',
+        'advanced': 'Checksums, Log Rotation, Performance Stats',
+        'enhanced': 'Dynamic Watch Management, Auto-scaling, Enhanced Stats'
+    }
+    
     # 시작 정보 표시
-    console.print(f"Starting {monitor_name}")
+    console.print(f"Starting {mode_names[mode]}")
     console.print(f"Directory: {abs_path}")
     console.print(f"Recursive: {'Yes' if monitor_config['recursive'] else 'No'}")
     console.print(f"Mode: {'Background' if background else 'Foreground'}")
-    
-    if enhanced:
-        console.print("Features: Dynamic Watch Management, Auto-scaling, Enhanced Stats")
-    elif advanced:
-        console.print("Features: Checksum, Log Rotation, Performance Stats")
+    console.print(f"Features: {mode_features[mode]}")
     
     if monitor_config['extensions']:
         ext_text = ", ".join(monitor_config['extensions'][:10])
@@ -404,8 +402,8 @@ def start(path: str, background: bool, config: str, advanced: bool, enhanced: bo
     try:
         if background:
             # 백그라운드에서 실행
-            cmd = [monitor_executable, abs_path]
-            if advanced and os.path.exists(config):
+            cmd = [monitor_executable, f'--mode={mode}', abs_path]
+            if os.path.exists(config):
                 cmd.extend(['--config', config])
                 
             process = subprocess.Popen(
@@ -418,7 +416,7 @@ def start(path: str, background: bool, config: str, advanced: bool, enhanced: bo
             with open(PID_FILE, 'w') as f:
                 f.write(str(process.pid))
             
-            console.print(f"SUCCESS: {monitor_name} started in background (PID: {process.pid})")
+            console.print(f"SUCCESS: {mode_names[mode]} started in background (PID: {process.pid})")
             console.print("Commands:")
             console.print("  fmon logs --tail    # View logs")
             console.print("  fmon status         # Check status")
@@ -427,8 +425,8 @@ def start(path: str, background: bool, config: str, advanced: bool, enhanced: bo
             # 포그라운드에서 실행
             console.print("Press Ctrl+C to stop monitoring")
             
-            cmd = [monitor_executable, abs_path]
-            if advanced and os.path.exists(config):
+            cmd = [monitor_executable, f'--mode={mode}', abs_path]
+            if os.path.exists(config):
                 cmd.extend(['--config', config])
                 
             process = subprocess.Popen(cmd)
@@ -491,36 +489,43 @@ def status():
     table.add_column("Item", style="cyan", no_wrap=True, width=20)
     table.add_column("Value", style="white", width=50)
     
-    # Enhanced Monitor 상태 확인
-    enhanced_stats_file = "enhanced_stats.json"
-    enhanced_log_file = "enhanced_monitor.log"
-    enhanced_running = False
+    # Monitor 상태 확인
+    stats_file = "monitor_stats.json"
+    log_file_path = "monitor.log"
+    monitor_running = False
     
-    if os.path.exists(enhanced_stats_file):
+    if os.path.exists(stats_file):
         try:
-            with open(enhanced_stats_file, 'r') as f:
-                enhanced_stats = json.load(f)
+            with open(stats_file, 'r') as f:
+                stats = json.load(f)
             
-            # Enhanced monitor는 통계 파일로 실행 상태 확인
-            if enhanced_stats.get('uptime_seconds', 0) > 0:
-                enhanced_running = True
-                table.add_row("Enhanced Monitor", "[green]Running[/green]")
-                table.add_row("Active Watches", f"{enhanced_stats.get('active_watches', 0):,}")
-                table.add_row("Total Events", f"{enhanced_stats.get('total_events', 0):,}")
-                table.add_row("Memory Usage", f"{enhanced_stats.get('memory_usage_kb', 0):,} KB")
+            # Monitor는 통계 파일로 실행 상태 확인
+            if stats.get('uptime_seconds', 0) > 0:
+                monitor_running = True
+                mode = stats.get('mode', 'unknown')
+                table.add_row("Monitor", "[green]Running[/green]")
+                table.add_row("Mode", mode.capitalize())
+                table.add_row("Active Watches", f"{stats.get('active_watches', 0):,}")
+                table.add_row("Total Events", f"{stats.get('total_events', 0):,}")
+                table.add_row("Memory Usage", f"{stats.get('memory_usage_kb', 0):,} KB")
                 
-                uptime = enhanced_stats.get('uptime_seconds', 0)
+                uptime = stats.get('uptime_seconds', 0)
                 hours = uptime // 3600
                 minutes = (uptime % 3600) // 60
                 seconds = uptime % 60
-                table.add_row("Enhanced Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                table.add_row("Uptime", f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                
+                # Enhanced mode specific stats
+                if mode == 'enhanced':
+                    table.add_row("Watch Capacity", f"{stats.get('watch_capacity', 0):,}")
+                    table.add_row("Memory Reallocations", f"{stats.get('memory_reallocations', 0):,}")
         except:
-            table.add_row("Enhanced Monitor", "Stopped")
+            table.add_row("Monitor", "Stopped")
     else:
-        table.add_row("Enhanced Monitor", "Stopped")
+        table.add_row("Monitor", "Stopped")
     
-    # 기본 모니터 실행 상태 확인
-    basic_running = False
+    # PID 파일 기반 상태 확인 (backup method)
+    pid_running = False
     if os.path.exists(PID_FILE):
         try:
             with open(PID_FILE, 'r') as f:
@@ -529,8 +534,9 @@ def status():
             # 프로세스 존재 확인
             try:
                 os.kill(pid, 0)
-                basic_running = True
-                table.add_row("Basic Monitor", "[green]Running[/green]")
+                pid_running = True
+                if not monitor_running:  # 통계 파일이 없는 경우만 표시
+                    table.add_row("Monitor", "[green]Running[/green]")
                 table.add_row("PID", str(pid))
                 
                 # 프로세스 정보
@@ -544,32 +550,23 @@ def status():
                     pass
                     
             except ProcessLookupError:
-                table.add_row("Basic Monitor", "Stopped (PID file exists but no process)")
+                table.add_row("Monitor", "Stopped (PID file exists but no process)")
                 os.remove(PID_FILE)
                 
         except Exception as e:
-            table.add_row("Basic Monitor", f"Error: {e}")
-    else:
-        table.add_row("Basic Monitor", "Stopped")
+            table.add_row("Monitor", f"Error: {e}")
     
     # 전체 상태 요약
-    if enhanced_running or basic_running:
+    if monitor_running or pid_running:
         table.add_row("Overall Status", "[green]Monitoring Active[/green]")
     else:
-        table.add_row("Overall Status", "[red]All Monitors Stopped[/red]")
+        table.add_row("Overall Status", "[red]Monitor Stopped[/red]")
     
-    # Enhanced Monitor 로그 파일 정보
-    if os.path.exists(enhanced_log_file):
-        stat = os.stat(enhanced_log_file)
-        table.add_row("Enhanced Log", enhanced_log_file)
-        table.add_row("Enhanced Log Size", format_file_size(stat.st_size))
-        table.add_row("Enhanced Log Modified", datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
-    
-    # 기본 로그 파일 정보
-    if os.path.exists(LOG_FILE):
-        stat = os.stat(LOG_FILE)
-        table.add_row("Basic Log", LOG_FILE)
-        table.add_row("Basic Log Size", format_file_size(stat.st_size))
+    # 로그 파일 정보
+    if os.path.exists(log_file_path):
+        stat = os.stat(log_file_path)
+        table.add_row("Log File", log_file_path)
+        table.add_row("Log Size", format_file_size(stat.st_size))
         table.add_row("Basic Log Modified", datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"))
         
         # 라인 수 계산
@@ -605,28 +602,14 @@ def logs():
 
 @logs.command()
 @click.option('--lines', '-n', default=20, help='Number of lines to display')
-@click.option('--enhanced', is_flag=True, help='Show enhanced monitor logs')
-def show(lines: int, enhanced: bool):
-    """View recent logs (supports all monitor types)"""
+def show(lines: int):
+    """View recent logs"""
     
-    # Enhanced Monitor 로그 파일 확인
-    enhanced_log_file = "enhanced_monitor.log"
-    basic_log_file = LOG_FILE
-    
-    if enhanced:
-        log_file = enhanced_log_file
-        log_type = "Enhanced Monitor"
-    else:
-        log_file = basic_log_file
-        log_type = "Basic Monitor"
+    log_file = "monitor.log"
     
     if not os.path.exists(log_file):
-        if enhanced:
-            console.print("WARNING: Enhanced monitor log file not found")
-            console.print("Start enhanced monitor first: fmon start --enhanced")
-        else:
-            console.print("WARNING: Log file not found")
-            console.print("Start monitor first: fmon start")
+        console.print("WARNING: Log file not found")
+        console.print("Start monitor first: fmon start")
         return
     
     try:
@@ -635,18 +618,17 @@ def show(lines: int, enhanced: bool):
         
         recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
         
-        console.print(f"Recent {len(recent_lines)} lines from {log_type} log:")
+        console.print(f"Recent {len(recent_lines)} lines from monitor log:")
         console.print("=" * 60)
         
         for line in recent_lines:
             line = line.strip()
             if line:
-                # Enhanced monitor 로그 색상 지정
-                if enhanced and ('ERROR' in line or 'WARN' in line):
+                if 'ERROR' in line or 'WARN' in line:
                     console.print(f"[red]{line}[/red]")
-                elif enhanced and ('INFO' in line):
+                elif 'INFO' in line:
                     console.print(f"[green]{line}[/green]")
-                elif enhanced and ('DEBUG' in line):
+                elif 'DEBUG' in line:
                     console.print(f"[dim]{line}[/dim]")
                 else:
                     console.print(line)
@@ -655,12 +637,10 @@ def show(lines: int, enhanced: bool):
         console.print(f"ERROR: Failed to read log: {e}")
 
 @logs.command()
-@click.option('--enhanced', is_flag=True, help='Tail enhanced monitor logs')
-def tail(enhanced: bool):
-    """Real-time log viewing (supports all monitor types)"""
+def tail():
+    """Real-time log viewing"""
     
-    # Enhanced Monitor 로그 파일 확인
-    enhanced_log_file = "enhanced_monitor.log"
+    log_file = "monitor.log"
     basic_log_file = LOG_FILE
     
     if enhanced:
@@ -893,45 +873,41 @@ def preset(preset: str):
         })
 
 @cli.command()
-@click.option('--target', '-t', type=click.Choice(['main', 'advanced', 'all']), default='all', help='Build target')
-def build(target: str):
-    """Build C program"""
+@click.option('--clean', '-c', is_flag=True, help='Clean before building')
+def build(clean: bool):
+    """Build unified monitor executable"""
     
-    console.print(f"Building {target} target...")
+    console.print("Building unified file monitor...")
     
     try:
+        if clean:
+            console.print("Cleaning previous build...")
+            result = subprocess.run(['make', 'clean'], capture_output=True, text=True)
+            if result.returncode != 0:
+                console.print(f"[yellow]Clean warning: {result.stderr}[/yellow]")
+        
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console
         ) as progress:
-            if target == 'all':
-                task = progress.add_task("Building all targets...", total=None)
-                result = subprocess.run(['make', 'all'], capture_output=True, text=True)
-            elif target == 'main':
-                task = progress.add_task("Building main monitor...", total=None)
-                result = subprocess.run(['make', 'build/main'], capture_output=True, text=True)
-            elif target == 'advanced':
-                task = progress.add_task("Building advanced monitor...", total=None)
-                result = subprocess.run(['make', 'build/advanced_monitor'], capture_output=True, text=True)
-            
+            task = progress.add_task("Building unified monitor...", total=None)
+            result = subprocess.run(['make', 'all'], capture_output=True, text=True)
             progress.remove_task(task)
         
         if result.returncode == 0:
-            console.print(f"SUCCESS: Build completed ({target})")
+            console.print("[green]✓ Build completed successfully![/green]")
             
-            # 빌드된 파일 목록 표시
-            if target == 'all':
-                console.print("Executables:")
-                console.print("  - build/main (Standard monitor)")
-                console.print("  - build/advanced_monitor (Advanced monitor)")
-            elif target == 'main':
-                console.print("Executable: build/main")
-            elif target == 'advanced':
-                console.print("Executable: build/advanced_monitor")
-                
+            # Check if binary exists
+            if os.path.exists('build/monitor'):
+                size = os.path.getsize('build/monitor') / 1024
+                console.print(f"Executable: build/monitor ({size:.1f} KB)")
+                console.print("\nUsage:")
+                console.print("  fmon start --mode=basic       # Basic monitoring")
+                console.print("  fmon start --mode=advanced    # With checksums")
+                console.print("  fmon start --mode=enhanced    # With dynamic scaling")
         else:
-            console.print(f"ERROR: Build failed ({target})")
+            console.print("[red]ERROR: Build failed[/red]")
             if result.stderr:
                 console.print(f"Error: {result.stderr}")
             if result.stdout:
