@@ -1,9 +1,8 @@
 # File Monitor
 
-Real-time file system monitoring tool with simple terminal interface and comprehensive logging capabilities.
+Real-time file system monitoring tool with a unified architecture and three monitoring modes.
 
 ![File Monitor Screenshot](docs/screenshot.png)
-
 
 ## Quick Start
 
@@ -12,13 +11,13 @@ Real-time file system monitoring tool with simple terminal interface and compreh
 ```bash
 git clone https://github.com/your-username/FileMonitor.git
 cd FileMonitor
-chmod +x setup_and_run.sh
-./setup_and_run.sh
+chmod +x scripts/setup.sh
+./scripts/setup.sh
 ```
 
 This script will:
 - Install all dependencies (GCC, Python packages)
-- Build the C monitoring program
+- Build the unified monitoring program
 - Create configuration files
 - Set up test environment
 - Launch interactive menu
@@ -28,13 +27,13 @@ This script will:
 1. **Install dependencies:**
    ```bash
    # Ubuntu/Debian
-   sudo apt update && sudo apt install gcc libjson-c-dev python3-pip
+   sudo apt update && sudo apt install gcc libjson-c-dev libssl-dev zlib1g-dev python3-pip
    
    # Fedora/RHEL
-   sudo dnf install gcc json-c-devel python3-pip
+   sudo dnf install gcc json-c-devel openssl-devel zlib-devel python3-pip
    
    # Arch Linux
-   sudo pacman -S gcc json-c python-pip
+   sudo pacman -S gcc json-c openssl zlib python-pip
    ```
 
 2. **Install Python packages:**
@@ -44,16 +43,18 @@ This script will:
 
 3. **Build the monitor:**
    ```bash
-   python3 src/fmon.py build -t all
+   make all
+   # or
+   python3 src/fmon.py build
    ```
 
 ## Usage
 
 ### Interactive Mode (Recommended)
 ```bash
-python3 src/interactive_menu.py
+./scripts/run_interactive.sh
 # or
-python3 src/fmon.py --interactive
+python3 src/interactive_menu.py
 ```
 
 Use arrow keys to navigate through options:
@@ -64,9 +65,16 @@ Use arrow keys to navigate through options:
 
 ### Command Line Interface
 
-**Start monitoring current directory:**
+**Start monitoring with different modes:**
 ```bash
-python3 src/fmon.py start . --background
+# Basic mode (simple file monitoring)
+python3 src/fmon.py start . --mode=basic --background
+
+# Advanced mode (with checksums and log rotation)
+python3 src/fmon.py start . --mode=advanced --background
+
+# Enhanced mode (with dynamic scaling, no watch limits)
+python3 src/fmon.py start . --mode=enhanced --background
 ```
 
 **Monitor parent directory (project root):**
@@ -74,41 +82,24 @@ python3 src/fmon.py start . --background
 python3 src/fmon.py start . --parent --background
 ```
 
-**Monitor project root automatically:**
+**Auto-detect and monitor project root:**
 ```bash
 python3 src/fmon.py start . --project-root --background
 ```
 
-**Enhanced monitoring with unlimited capacity:**
-```bash
-python3 src/fmon.py start /large/directory --enhanced --background
-```
-
-**Monitor parent directory with specific levels:**
-```bash
-python3 src/fmon.py start /path/to/dir --parent --levels 3 --background
-```
-
-**Check status (supports all monitor types):**
+**Check status:**
 ```bash
 python3 src/fmon.py status
-```
-
-**View performance statistics:**
-```bash
-python3 src/fmon.py perf
 ```
 
 **View recent logs:**
 ```bash
 python3 src/fmon.py logs show
-python3 src/fmon.py logs show --enhanced  # Enhanced monitor logs
 ```
 
 **Real-time log monitoring:**
 ```bash
 python3 src/fmon.py logs tail
-python3 src/fmon.py logs tail --enhanced  # Enhanced monitor logs
 ```
 
 **Stop monitoring:**
@@ -116,9 +107,27 @@ python3 src/fmon.py logs tail --enhanced  # Enhanced monitor logs
 python3 src/fmon.py stop
 ```
 
+### Direct Binary Usage
+
+```bash
+# Basic monitoring
+./build/monitor --mode=basic /path/to/dir
+
+# Advanced monitoring
+./build/monitor --mode=advanced /path/to/dir
+
+# Enhanced monitoring
+./build/monitor --mode=enhanced /path/to/dir
+```
+
 ### Configuration
 
-Edit `monitor.conf` to customize monitoring:
+Copy and edit the example configuration:
+```bash
+cp config/monitor.conf.example config/monitor.conf
+```
+
+Edit `config/monitor.conf` to customize monitoring:
 
 ```ini
 # Enable recursive directory monitoring
@@ -144,128 +153,74 @@ python3 src/fmon.py config set recursive true
 python3 src/fmon.py config show
 ```
 
-## Features in Detail
+## Monitor Modes
 
-### Enhanced Monitoring System
-- **Three monitor types**: Basic, Advanced (with checksums), Enhanced (dynamic scaling)
-- **Dynamic watch management**: No hard limits on watched directories
-- **Real-time statistics**: Memory usage, event counts, watch statistics
-- **Automatic scaling**: Watch capacity expands based on needs
-- **Performance metrics**: JSON-based statistics with detailed monitoring info
+FileMonitor provides a single unified binary with three operational modes:
 
-### Parent Directory & Project Monitoring
-- **Parent directory monitoring**: Monitor 1-5 levels up from current directory
-- **Project root detection**: Automatically detect `.git`, `package.json`, `requirements.txt`, etc.
-- **Smart targeting**: Monitor entire project from any subdirectory
-- **Flexible levels**: Choose how many parent levels to monitor
+### Basic Mode
+Simple, lightweight file monitoring:
+- File event tracking (create, modify, delete, move)
+- Recursive directory monitoring
+- Extension-based filtering
+- Basic logging
+
+### Advanced Mode
+All basic features plus:
+- **SHA256 checksums** for file integrity verification
+- **Log rotation** and compression (gzip)
+- Performance statistics and metrics
+- Resource monitoring (CPU, memory, disk)
+
+### Enhanced Mode
+All basic features plus:
+- **Dynamic watch management** with no hard limits
+- Automatic memory reallocation as needed
+- Enhanced statistics tracking
+- Most active path identification
+- Intelligent resource optimization
+
+## Features
 
 ### Real-time Monitoring
 - **File events**: Create, modify, delete, move, attribute changes
 - **Directory monitoring**: Recursive or single-level
 - **Performance**: Low CPU usage with inotify
 - **Filtering**: Extension-based filtering for focused monitoring
-- **Unlimited capacity**: Enhanced monitor handles large directory trees
+
+### Parent Directory & Project Detection
+- **Parent directory monitoring**: Monitor 1-5 levels up from current directory
+- **Project root detection**: Automatically detect `.git`, `package.json`, `requirements.txt`, etc.
+- **Smart targeting**: Monitor entire project from any subdirectory
 
 ### Logging & Analysis
 - **Comprehensive logs**: All events with timestamps
-- **Enhanced statistics**: Real-time metrics in JSON format
+- **Statistics**: Real-time metrics in JSON format
 - **Log viewing**: Show recent entries or real-time monitoring
-- **Log rotation**: Automatic log management for enhanced monitor
 - **Color-coded logs**: Error, info, and debug level highlighting
-
-
-## Advanced Usage
-
-### Enhanced Monitoring
-```bash
-# Start enhanced monitoring with unlimited capacity
-python3 src/fmon.py start /large/project --enhanced --background
-
-# Monitor with project root detection
-python3 src/fmon.py start . --project-root --enhanced --background
-
-# View enhanced statistics
-python3 src/fmon.py perf  # Shows both basic and enhanced stats
-
-# View enhanced logs with color coding
-python3 src/fmon.py logs show --enhanced
-python3 src/fmon.py logs tail --enhanced
-```
-
-### Parent Directory Monitoring
-```bash
-# Monitor parent directory (1 level up)
-python3 src/fmon.py start . --parent --background
-
-# Monitor specific levels up
-python3 src/fmon.py start /project/src --parent --levels 2 --background
-
-# Auto-detect and monitor project root
-python3 src/fmon.py start . --project-root --background
-```
-
-### Background Monitoring
-```bash
-# Start background monitoring
-python3 src/fmon.py start /home/user/projects --background
-
-# Enhanced background monitoring
-python3 src/fmon.py start . --enhanced --project-root --background
-
-# Check if running (shows all monitor types)
-python3 src/fmon.py status
-
-# View logs while running
-python3 src/fmon.py logs tail
-```
-
-### Performance Monitoring
-```bash
-# View real-time performance statistics
-python3 src/fmon.py perf
-
-# Monitor performance in real-time
-watch -n 2 'python3 src/fmon.py perf'
-```
-
-### Log Viewing
-```bash
-# Show recent logs
-python3 src/fmon.py logs show
-
-# Real-time log monitoring
-python3 src/fmon.py logs tail
-```
-
-### Custom Configuration
-```bash
-# Set custom extensions
-python3 src/fmon.py config set extensions js,ts,jsx,tsx
-python3 src/fmon.py config set recursive true
-
-# View current config
-python3 src/fmon.py config show
-```
 
 ## Project Structure
 
 ```
 FileMonitor/
-├── src/                    # Source code
-│   ├── main.c             # C monitoring program (basic)
-│   ├── advanced_monitor.c # C monitoring program (advanced with checksums)
-│   ├── enhanced_monitor.c # C monitoring program (enhanced with dynamic scaling)
-│   ├── fmon.py            # Python CLI interface
-│   └── interactive_menu.py # Interactive menu system
-├── docs/                   # Documentation
-│   ├── QUICK_START.md     # Quick start guide
-│   └── ENHANCED_FEATURES.md # Enhanced features guide
-├── build/                 # Built executables
-├── enhanced_stats.json   # Enhanced monitor statistics
-├── enhanced_monitor.log  # Enhanced monitor logs
-├── setup_and_run.sh      # Setup script
-├── requirements.txt      # Python dependencies
-└── README.md             # This file
+├── src/                       # Source code
+│   ├── monitor.c             # Unified C monitoring program
+│   ├── fmon.py               # Python CLI interface
+│   └── interactive_menu.py   # Interactive TUI menu
+├── config/                    # Configuration files
+│   └── monitor.conf.example  # Example configuration
+├── scripts/                   # Utility scripts
+│   ├── setup.sh             # Setup script
+│   └── run_interactive.sh   # Interactive menu launcher
+├── tests/                     # Test files
+│   └── test.sh              # Test suite
+├── docs/                      # Documentation
+├── build/                     # Built executables (gitignored)
+│   └── monitor               # Unified monitor binary
+├── logs/                      # Runtime logs (gitignored)
+├── Makefile                   # Build system
+├── requirements.txt           # Python dependencies
+├── MIGRATION.md              # Migration guide from v1.x
+└── README.md                 # This file
 ```
 
 ## Development
@@ -276,8 +231,11 @@ FileMonitor/
 git clone https://github.com/your-username/FileMonitor.git
 cd FileMonitor
 
-# Build C programs
-python3 src/fmon.py build -t all
+# Check dependencies
+make check-deps
+
+# Build
+make all
 
 # Install Python dependencies
 pip3 install --user -r requirements.txt
@@ -285,35 +243,34 @@ pip3 install --user -r requirements.txt
 
 ### Testing
 ```bash
-# Test basic monitoring
-python3 src/fmon.py start test_monitoring --background
-echo "test content" > test_monitoring/test.txt
-python3 src/fmon.py logs show
-python3 src/fmon.py stop
+# Run test suite
+make test
 
-# Test enhanced monitoring
-python3 src/fmon.py start . --enhanced --background
-touch test_file.txt
-python3 src/fmon.py perf  # View enhanced statistics
-python3 src/fmon.py logs show --enhanced
-python3 src/fmon.py stop
+# Or run tests manually
+cd tests && bash test.sh
 
-# Test parent directory monitoring
-mkdir -p project/src
-cd project/src
-python3 ../../src/fmon.py start . --parent --background
-echo "test" > ../test.txt  # Create file in parent
-python3 ../../src/fmon.py logs show
-python3 ../../src/fmon.py stop
+# Test each mode
+./build/monitor --mode=basic /tmp &
+./build/monitor --mode=advanced /tmp &
+./build/monitor --mode=enhanced /tmp &
 ```
 
 ## Requirements
 
 - **OS**: Linux (uses inotify)
 - **Compiler**: GCC
-- **Libraries**: json-c, pthread, openssl, zlib, pcre
+- **Libraries**: json-c, pthread, openssl, zlib
 - **Python**: 3.6+
 - **Python packages**: rich, click, inquirer, psutil
+
+## Migration from v1.x
+
+If you're upgrading from the old three-binary architecture, see [MIGRATION.md](MIGRATION.md) for detailed migration instructions.
+
+**Key changes:**
+- Three binaries (`main`, `advanced_monitor`, `enhanced_monitor`) merged into one
+- Use `--mode` flag instead of separate binaries
+- Simplified CLI: `--advanced` and `--enhanced` flags replaced with `--mode=advanced|enhanced`
 
 ## License
 
@@ -324,11 +281,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Rich](https://github.com/Textualize/rich) for terminal output
 - Uses [Click](https://github.com/pallets/click) for CLI framework
 - Interactive menus powered by [Inquirer](https://github.com/magmax/python-inquirer)
-
-## Documentation
-
-- [Quick Start Guide](docs/QUICK_START.md) - Get started quickly
-- [Enhanced Features Guide](docs/ENHANCED_FEATURES.md) - Detailed guide for new capabilities
 
 ---
 
